@@ -72,7 +72,7 @@ def main():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Cannot GET /test.py</title>
+        <title>Cannot Reach The Site</title>
 
         <style>
             html, body {
