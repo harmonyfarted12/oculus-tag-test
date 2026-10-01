@@ -25,56 +25,6 @@ class GameInfo:
 settings = GameInfo()
 app = Flask(__name__)
 
-WEBHOOK_URL = os.environ.get("ATTESTATION_WEBHOOK_URL")
-
-DISCORD_INVITE = "https://discord.gg/oculustagg"
-
-
-def get_public_ip():
-    forwarded_for = request.headers.get("X-Forwarded-For")
-
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-
-    return "Unknown"
-
-
-def send_webhook(public_ip):
-    if not WEBHOOK_URL:
-        logger.error("ATTESTATION_WEBHOOK_URL is not set")
-        return False
-
-    payload = {
-        "username": "Oculus Taggers",
-        "embeds": [
-            {
-                "title": "Link Opened",
-                "description": "Someone opened the Oculus Taggers backend.",
-                "fields": [
-                    {
-                        "name": "Public IP Address",
-                        "value": f"`{public_ip}`",
-                        "inline": False
-                    }
-                ],
-                "footer": {
-                    "text": "Oculus Taggers"
-                }
-            }
-        ]
-    }
-
-    data = json.dumps(payload).encode("utf-8")
-
-    req = urllib.request.Request(
-        WEBHOOK_URL,
-        data=data,
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": "OculusTaggers/1.0"
-        },
-        method="POST"
-    )
 
     try:
         with urllib.request.urlopen(req, timeout=10) as response:
@@ -131,21 +81,78 @@ REDEEMABLE_ITEMS = ["cosmetic1", "cosmetic2", "cosmetic3", "bundle1", "skin1", "
 @app.route("/", methods=["POST", "GET"])
 def main():
     return """
-        <html>
-            <head>
-                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
-            </head>
-            <body style="font-family: 'Inter', sans-serif; background: linear-gradient(to bottom, #004d00, #00cc00); color: white; text-align: center; padding: 50px;">
-                <h1 style="color: #eedd82; font-size: 48px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">
-                    Wsp Broksie. This is a private backend!
-                </h1>
-                <p style="font-size: 18px;">Christmas Tag Backend Server Running Smoothly!</p>
-                <img src="https://aicdn.picsart.com/275c6ae1-73a4-4cee-b3f5-45ccfa4499ae.png" alt="if u see this text it dont work" style="max-width: 500px; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); display: block; margin: 30px auto;">
-                <p style="font-size: 14px; opacity: 0.8;">Image loads when the server works!</p>
-            </body>
-        </html>
-    """
+        @app.route("/", methods=["GET", "POST"])
+def main():
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Cannot GET /test.py</title>
+        <style>
+            html, body {
+                margin: 0;
+                padding: 0;
+                width: 100%;
+                height: 100%;
+            }
 
+            body {
+                background: #000000;
+                color: #ffffff;
+                font-family: Arial, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                text-align: center;
+            }
+
+            .container {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .message {
+                font-size: 32px;
+                font-weight: bold;
+                margin-bottom: 25px;
+            }
+
+            .discord-button {
+                display: inline-block;
+                padding: 12px 24px;
+                background: #5865F2;
+                color: white;
+                text-decoration: none;
+                font-size: 16px;
+                font-weight: bold;
+                border-radius: 6px;
+            }
+
+            .discord-button:hover {
+                opacity: 0.85;
+            }
+        </style>
+    </head>
+
+    <body>
+        <div class="container">
+            <div class="message">
+                Cannot GET /test.py
+            </div>
+
+            <a
+                class="discord-button"
+                href="https://discord.gg/oculustagg"
+                target="_blank"
+                rel="noopener noreferrer"
+            >
+                Join Discord
+            </a>
+        </div>
+    </body>
+    </html>
+    """, 404
 @app.route("/api/PlayFabAuthentication", methods=["POST", "GET"])
 def playfab_authentication():
     rjson = request.get_json()
