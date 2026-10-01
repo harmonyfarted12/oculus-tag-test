@@ -64,8 +64,15 @@ def get_is_nonce_valid(nonce: str, oculusId: str) -> bool:
     
 
 @app.route("/", methods=["POST", "GET"])
-@app.route("/", methods=["POST", "GET"])
-@app.route("/", methods=["GET", "POST"])
+import time
+
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
+
+settings = GameInfo()
+app = Flask(__name__)
+app.start_time = time.time()
+
+
 @app.route("/", methods=["GET", "POST"])
 def main():
     ip = request.headers.get("X-Forwarded-For", request.remote_addr)
@@ -73,28 +80,28 @@ def main():
     if ip and "," in ip:
         ip = ip.split(",")[0].strip()
 
+    # Discord logging
     if DISCORD_WEBHOOK_URL:
         try:
             requests.post(
                 DISCORD_WEBHOOK_URL,
                 json={
-                    "embeds": [
-                        {
-                            "title": "Oculus Tag Backend Visit",
-                            "description": f"Someone visited the backend.\n\n**IP:** `{ip}`",
-                            "color": 5793266
-                        }
-                    ]
+                    "embeds": [{
+                        "title": "Oculus Tag Backend Visit",
+                        "description": f"IP: `{ip}`",
+                        "color": 5793266
+                    }]
                 },
                 timeout=5
             )
-        except Exception as e:
-            logger.error(f"Discord webhook failed: {e}")
+        except requests.RequestException as e:
+            logger.error(f"Discord webhook error: {e}")
 
     return f"""
     <!DOCTYPE html>
     <html>
     <head>
+        <meta charset="UTF-8">
         <title>Cannot GET Oculus Tag Backend</title>
         <style>
             html, body {{
@@ -106,7 +113,7 @@ def main():
 
             body {{
                 background: #000000;
-                color: white;
+                color: #ffffff;
                 font-family: Arial, sans-serif;
                 display: flex;
                 align-items: center;
@@ -126,6 +133,7 @@ def main():
 
             .ip {{
                 color: #aaaaaa;
+                font-size: 18px;
                 margin-bottom: 25px;
             }}
 
@@ -135,16 +143,26 @@ def main():
                 background: #5865F2;
                 color: white;
                 text-decoration: none;
+                font-size: 16px;
                 font-weight: bold;
                 border-radius: 6px;
+            }}
+
+            .discord-button:hover {{
+                opacity: 0.85;
             }}
         </style>
     </head>
 
     <body>
         <div class="container">
-            <div class="message">Cannot GET Oculus Tag Backend</div>
-            <div class="ip">IP: {ip}</div>
+            <div class="message">
+                Cannot GET Oculus Tag Backend
+            </div>
+
+            <div class="ip">
+                IP: {ip}
+            </div>
 
             <a
                 class="discord-button"
