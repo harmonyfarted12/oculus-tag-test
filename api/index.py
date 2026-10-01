@@ -65,6 +65,7 @@ def get_is_nonce_valid(nonce: str, oculusId: str) -> bool:
 
 @app.route("/", methods=["POST", "GET"])
 @app.route("/", methods=["POST", "GET"])
+@app.route("/", methods=["GET", "POST"])
 def main():
     return """
     <!DOCTYPE html>
@@ -72,8 +73,7 @@ def main():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Cannot Reach The Site</title>
-
+        <title>Cannot GET Oculus Tag Backend</title>
         <style>
             html, body {
                 margin: 0;
@@ -96,7 +96,6 @@ def main():
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                justify-content: center;
             }
 
             .message {
@@ -114,7 +113,6 @@ def main():
                 font-size: 16px;
                 font-weight: bold;
                 border-radius: 6px;
-                transition: opacity 0.2s ease;
             }
 
             .discord-button:hover {
@@ -126,7 +124,7 @@ def main():
     <body>
         <div class="container">
             <div class="message">
-                Cannot GET /test.py
+                Cannot GET Oculus Tag Backend
             </div>
 
             <a
