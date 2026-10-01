@@ -15,7 +15,7 @@ def send_webhook():
         return False
 
     payload = {
-        "username": "Oculus Taggers",
+        "username": "Tyrone",
         "content": "Nigga Sybau"
     }
 
