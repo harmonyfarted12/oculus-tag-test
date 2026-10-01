@@ -10,7 +10,6 @@ import uuid
 import logging
 from typing import Dict, List, Optional
 
-import time
 
 ATTESTATION_WEBHOOK_URL = os.environ.get("ATTESTATION_WEBHOOK_URL", "")
 
