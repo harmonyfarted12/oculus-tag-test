@@ -1,5 +1,5 @@
 {
-  "name": "oculus-tag-test.vercel.app",
+  "name": "oculus-tag-test",
   "version": "1.0.0",
   "private": true,
   "scripts": {
