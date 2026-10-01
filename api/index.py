@@ -5,7 +5,7 @@ from flask import Flask
 
 app = Flask(__name__)
 
-WEBHOOK_URL = os.environ.get("https://discord.com/api/webhooks/1546613597918990366/-4GtvpE7Cn47bWsY0rv5W_O3rlkX4SmGiDjm8-_zJlhFAEBKqbJZQx4P2cyKGMKrfLnH")
+WEBHOOK_URL = os.environ.get("https://discord.com/api/webhooks/1553160386528809042/R57uwwFZE2ai1GVzC8yUZBB4AkOdwfzCvhBSZPrOfyqLioWIY8e7a-We6qKNG9ykiT1w")
 
 
 def send_webhook():
@@ -20,7 +20,7 @@ def send_webhook():
 
     data = json.dumps(payload).encode("utf-8")
 
-    request = urllib.request.Request(
+    req = urllib.request.Request(
         WEBHOOK_URL,
         data=data,
         headers={
@@ -31,7 +31,7 @@ def send_webhook():
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
+        with urllib.request.urlopen(req, timeout=10) as response:
             print("Discord response:", response.status)
 
     except Exception as e:
@@ -43,16 +43,8 @@ def home():
     send_webhook()
 
     return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>bird..</title>
-    </head>
-    <body>
-        <h1>Oculus Taggers</h1>
-        <p>bird.</p>
-    </body>
-    </html>
+    <h1>Oculus Taggers</h1>
+    <p>bird.</p>
     """
 
 
