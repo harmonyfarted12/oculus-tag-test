@@ -61,86 +61,30 @@ def get_is_nonce_valid(nonce: str, oculusId: str) -> bool:
         url=f'https://graph.oculus.com/user_nonce_validate?nonce={nonce}&user_id={oculusId}&access_token={settings.ApiKey}',
         headers={"content-type": "application/json"})
     return req.json().get("is_valid", False)
-    
 
-@app.route("/", methods=["POST", "GET"])
+# GitHub codes raw URL for redeem codes
+CODES_GITHUB_URL = "https://github.com/redapplegtag/backendsfrr/raw/main/codes.txt"
+
+# Sample item IDs for code redemption
+REDEEMABLE_ITEMS = ["cosmetic1", "cosmetic2", "cosmetic3", "bundle1", "skin1", "hat1", "gloves1"]
+
 @app.route("/", methods=["POST", "GET"])
 def main():
     return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Cannot GET /test.py</title>
-
-        <style>
-            html, body {
-                margin: 0;
-                padding: 0;
-                width: 100%;
-                height: 100%;
-            }
-
-            body {
-                background: #000000;
-                color: #ffffff;
-                font-family: Arial, sans-serif;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                text-align: center;
-            }
-
-            .container {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-            }
-
-            .message {
-                font-size: 32px;
-                font-weight: bold;
-                margin-bottom: 25px;
-            }
-
-            .discord-button {
-                display: inline-block;
-                padding: 12px 24px;
-                background: #5865F2;
-                color: #ffffff;
-                text-decoration: none;
-                font-size: 16px;
-                font-weight: bold;
-                border-radius: 6px;
-                transition: opacity 0.2s ease;
-            }
-
-            .discord-button:hover {
-                opacity: 0.85;
-            }
-        </style>
-    </head>
-
-    <body>
-        <div class="container">
-            <div class="message">
-                Cannot GET /test.py
-            </div>
-
-            <a
-                class="discord-button"
-                href="https://discord.gg/oculustagg"
-                target="_blank"
-                rel="noopener noreferrer"
-            >
-                Join Discord
-            </a>
-        </div>
-    </body>
-    </html>
-    """, 404
+        <html>
+            <head>
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+            </head>
+            <body style="font-family: 'Inter', sans-serif; background: linear-gradient(to bottom, #004d00, #00cc00); color: white; text-align: center; padding: 50px;">
+                <h1 style="color: #eedd82; font-size: 48px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">
+                    Wsp Broksie. This is a private backend!
+                </h1>
+                <p style="font-size: 18px;">Christmas Tag Backend Server Running Smoothly!</p>
+                <img src="https://aicdn.picsart.com/275c6ae1-73a4-4cee-b3f5-45ccfa4499ae.png" alt="if u see this text it dont work" style="max-width: 500px; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); display: block; margin: 30px auto;">
+                <p style="font-size: 14px; opacity: 0.8;">Image loads when the server works!</p>
+            </body>
+        </html>
+    """
 
 @app.route("/api/PlayFabAuthentication", methods=["POST", "GET"])
 def playfab_authentication():
@@ -274,8 +218,102 @@ def titledata():
         "EnableTwoFactorAuth": False,
         "MaxLoginAttempts": 5,
         "SessionTimeoutMinutes": 30,
-
-        
+        # Game Mechanics
+        "GorillanalyticsChance": 4320,
+        "UseLegacyIAP": False,
+        "MaxPlayersPerRoom": 8,
+        "DefaultGameMode": "Tag",
+        "EnableVoiceChat": True,
+        "ChatFilterEnabled": True,
+        "MaxChatLength": 100,
+        "SpawnProtectionTime": 5,
+        "GameRoundDuration": 300,
+        "RespawnDelay": 3,
+        "TagCooldown": 1,
+        "PowerupSpawnRate": 0.1,
+        "CurrencyMultiplier": 1.0,
+        "DailyLoginReward": 100,
+        "XPPerKill": 50,
+        "LevelCap": 100,
+        "EnableAchievements": True,
+        "LeaderboardUpdateInterval": 60,
+        "AntiCheatEnabled": True,
+        "ReportCooldown": 300,
+        "FriendLimit": 50,
+        "PartySizeLimit": 4,
+        "MatchmakingTimeout": 30,
+        "PingThreshold": 200,
+        "RegionPriority": ["US", "EU", "AS"],
+        "EnableSpectatorMode": True,
+        "TutorialEnabled": True,
+        "NewsFeedUrl": "https://discord.gg/CHRISTMASTAG",
+        "UpdateCheckInterval": 3600,
+        "BackupInterval": 86400,
+        "LogLevel": "INFO",
+        "DebugMode": False,
+        "MaintenanceMode": False,
+        "ServerVersion": "1.2.3",
+        "ClientMinVersion": "1.2.0",
+        "EnableBetaFeatures": False,
+        "CustomEmotesEnabled": True,
+        "EmoteLimitPerPlayer": 10,
+        "VoiceVolumeDefault": 0.8,
+        "MusicVolumeDefault": 0.5,
+        "SFXVolumeDefault": 1.0,
+        "HUDEnabled": True,
+        "MinimapEnabled": True,
+        "CrosshairCustomizable": True,
+        "ControllerSupport": True,
+        "KeyboardBindingsDefault": {"forward": "W", "backward": "S", "jump": "SPACE", "crouch": "C"},
+        "TouchControlsEnabled": True,
+        # New Configurations
+        "EnableSeasonalEvents": True,
+        "SeasonalEventName": "WinterFest2025",
+        "EventStartDate": "2025-12-01",
+        "EventEndDate": "2026-01-15",
+        "DailyChallengeLimit": 3,
+        "WeeklyChallengeLimit": 10,
+        "AchievementRewardCurrency": 50,
+        "MaxInventorySlots": 100,
+        "TradeEnabled": True,
+        "TradeTaxRate": 0.05,
+        "VoiceChatMaxRange": 10.0,
+        "MinLevelForRanked": 10,
+        "RankedMatchmakingEnabled": True,
+        "SeasonResetIntervalDays": 90,
+        "DailyRewardMultiplier": 1.5,
+        "WeeklyRewardMultiplier": 2.0,
+        "EnableGuilds": True,
+        "MaxGuildMembers": 50,
+        "GuildCreationCost": 1000,
+        "SpectatorCameraModes": ["Free", "Follow", "Fixed"],
+        "EnableCustomSkins": True,
+        "CustomSkinUploadLimit": 5,
+        "ServerRestartIntervalHours": 24,
+        "MaxReportCountPerDay": 5,
+        "BanAppealUrl": "https://discord.gg/CHRISTMASTAG",
+        "EnableCrossplay": True,
+        "DefaultFOV": 90,
+        "MaxFOV": 120,
+        "MinFOV": 60,
+        "EnableDynamicWeather": True,
+        "WeatherChangeInterval": 600,
+        "SupportedLanguages": ["en", "es", "fr", "de", "zh"],
+        "DefaultLanguage": "en",
+        "EnablePushNotifications": True,
+        "NotificationCooldownSeconds": 300,
+        "MaxPartyInvites": 10,
+        "EnableClanTags": True,
+        "MaxClanTagLength": 4,
+        "EnableDailyQuests": True,
+        "DailyQuestRefreshHour": 0,
+        "MaxConcurrentMatches": 100,
+        "ServerRegionLatencyCaps": {"US": 150, "EU": 200, "AS": 250},
+        "EnableVoiceModeration": True,
+        "VoiceModerationThreshold": 0.9,
+        "EnablePlayerFeedback": True,
+        "FeedbackSubmissionUrl": "https://discord.gg/CHRISTMASTAG/feedback"
+    }
     return jsonify(response_data)
 
 @app.route("/api/ConsumeOculusIAP", methods=["POST"])
@@ -626,14 +664,7 @@ def unlock_achievement():
         return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
     return return_function_json("UnlockAchievement", {"AchievementId": rjson.get("AchievementId")}, rjson.get("PlayFabId"))
 
-@app.route("/api/GetSeasonalEvent", methods=["POST"])
-def get_seasonal_event():
-    return jsonify({
-        "EventName": "WinterFest2025",
-        "StartDate": "2025-12-01",
-        "EndDate": "2026-01-15",
-        "Rewards": ["snow_hat", "ice_gloves"]
-    }), 200
+
 
 @app.route("/api/SubmitFeedback", methods=["POST"])
 def submit_feedback():
