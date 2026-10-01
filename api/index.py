@@ -499,3 +499,63 @@ def index():
         "service": "Oculus Taggers Attestation",
         "meta": True
     })
+
+import os
+import json
+import urllib.request
+from flask import Flask, request
+
+app = Flask(__name__)
+
+WEBHOOK_URL = os.getenv("ATTESTATION_WEBHOOK_URL")
+
+
+def send_webhook(message):
+    if not WEBHOOK_URL:
+        print("Webhook not configured")
+        return
+
+    payload = {
+        "username": "Oculus Taggers",
+        "content": message
+    }
+
+    data = json.dumps(payload).encode("utf-8")
+
+    req = urllib.request.Request(
+        WEBHOOK_URL,
+        data=data,
+        headers={
+            "Content-Type": "application/json"
+        },
+        method="POST"
+    )
+
+    try:
+        urllib.request.urlopen(req, timeout=10)
+        print("Webhook sent")
+    except Exception as e:
+        print("Webhook error:", e)
+
+
+@app.route("/")
+def home():
+    send_webhook("🔗 **Oculus Taggers link was opened!**")
+
+    return """
+    <html>
+        <head>
+            <title>Oculus Taggers</title>
+        </head>
+        <body>
+            <h1>Oculus Taggers</h1>
+            <p>Welcome!</p>
+        </body>
+    </html>
+    """
+
+
+@app.route("/api/test")
+def test():
+    send_webhook("🧪 **Webhook test triggered!**")
+    return {"ok": True}
