@@ -9,9 +9,9 @@ import uuid
 import logging
 from typing import Dict, List, Optional
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+import time
+
+ATTESTATION_WEBHOOK_URL = os.environ.get("ATTESTATION_WEBHOOK_URL", "")
 
 class GameInfo:
     def __init__(self):
