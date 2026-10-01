@@ -61,12 +61,7 @@ def get_is_nonce_valid(nonce: str, oculusId: str) -> bool:
         url=f'https://graph.oculus.com/user_nonce_validate?nonce={nonce}&user_id={oculusId}&access_token={settings.ApiKey}',
         headers={"content-type": "application/json"})
     return req.json().get("is_valid", False)
-
-# GitHub codes raw URL for redeem codes
-CODES_GITHUB_URL = "https://github.com/redapplegtag/backendsfrr/raw/main/codes.txt"
-
-# Sample item IDs for code redemption
-REDEEMABLE_ITEMS = ["cosmetic1", "cosmetic2", "cosmetic3", "bundle1", "skin1", "hat1", "gloves1"]
+    
 
 @app.route("/", methods=["POST", "GET"])
 @app.route("/", methods=["POST", "GET"])
@@ -279,102 +274,8 @@ def titledata():
         "EnableTwoFactorAuth": False,
         "MaxLoginAttempts": 5,
         "SessionTimeoutMinutes": 30,
-        # Game Mechanics
-        "GorillanalyticsChance": 4320,
-        "UseLegacyIAP": False,
-        "MaxPlayersPerRoom": 8,
-        "DefaultGameMode": "Tag",
-        "EnableVoiceChat": True,
-        "ChatFilterEnabled": True,
-        "MaxChatLength": 100,
-        "SpawnProtectionTime": 5,
-        "GameRoundDuration": 300,
-        "RespawnDelay": 3,
-        "TagCooldown": 1,
-        "PowerupSpawnRate": 0.1,
-        "CurrencyMultiplier": 1.0,
-        "DailyLoginReward": 100,
-        "XPPerKill": 50,
-        "LevelCap": 100,
-        "EnableAchievements": True,
-        "LeaderboardUpdateInterval": 60,
-        "AntiCheatEnabled": True,
-        "ReportCooldown": 300,
-        "FriendLimit": 50,
-        "PartySizeLimit": 4,
-        "MatchmakingTimeout": 30,
-        "PingThreshold": 200,
-        "RegionPriority": ["US", "EU", "AS"],
-        "EnableSpectatorMode": True,
-        "TutorialEnabled": True,
-        "NewsFeedUrl": "https://discord.gg/CHRISTMASTAG",
-        "UpdateCheckInterval": 3600,
-        "BackupInterval": 86400,
-        "LogLevel": "INFO",
-        "DebugMode": False,
-        "MaintenanceMode": False,
-        "ServerVersion": "1.2.3",
-        "ClientMinVersion": "1.2.0",
-        "EnableBetaFeatures": False,
-        "CustomEmotesEnabled": True,
-        "EmoteLimitPerPlayer": 10,
-        "VoiceVolumeDefault": 0.8,
-        "MusicVolumeDefault": 0.5,
-        "SFXVolumeDefault": 1.0,
-        "HUDEnabled": True,
-        "MinimapEnabled": True,
-        "CrosshairCustomizable": True,
-        "ControllerSupport": True,
-        "KeyboardBindingsDefault": {"forward": "W", "backward": "S", "jump": "SPACE", "crouch": "C"},
-        "TouchControlsEnabled": True,
-        # New Configurations
-        "EnableSeasonalEvents": True,
-        "SeasonalEventName": "WinterFest2025",
-        "EventStartDate": "2025-12-01",
-        "EventEndDate": "2026-01-15",
-        "DailyChallengeLimit": 3,
-        "WeeklyChallengeLimit": 10,
-        "AchievementRewardCurrency": 50,
-        "MaxInventorySlots": 100,
-        "TradeEnabled": True,
-        "TradeTaxRate": 0.05,
-        "VoiceChatMaxRange": 10.0,
-        "MinLevelForRanked": 10,
-        "RankedMatchmakingEnabled": True,
-        "SeasonResetIntervalDays": 90,
-        "DailyRewardMultiplier": 1.5,
-        "WeeklyRewardMultiplier": 2.0,
-        "EnableGuilds": True,
-        "MaxGuildMembers": 50,
-        "GuildCreationCost": 1000,
-        "SpectatorCameraModes": ["Free", "Follow", "Fixed"],
-        "EnableCustomSkins": True,
-        "CustomSkinUploadLimit": 5,
-        "ServerRestartIntervalHours": 24,
-        "MaxReportCountPerDay": 5,
-        "BanAppealUrl": "https://discord.gg/CHRISTMASTAG",
-        "EnableCrossplay": True,
-        "DefaultFOV": 90,
-        "MaxFOV": 120,
-        "MinFOV": 60,
-        "EnableDynamicWeather": True,
-        "WeatherChangeInterval": 600,
-        "SupportedLanguages": ["en", "es", "fr", "de", "zh"],
-        "DefaultLanguage": "en",
-        "EnablePushNotifications": True,
-        "NotificationCooldownSeconds": 300,
-        "MaxPartyInvites": 10,
-        "EnableClanTags": True,
-        "MaxClanTagLength": 4,
-        "EnableDailyQuests": True,
-        "DailyQuestRefreshHour": 0,
-        "MaxConcurrentMatches": 100,
-        "ServerRegionLatencyCaps": {"US": 150, "EU": 200, "AS": 250},
-        "EnableVoiceModeration": True,
-        "VoiceModerationThreshold": 0.9,
-        "EnablePlayerFeedback": True,
-        "FeedbackSubmissionUrl": "https://discord.gg/CHRISTMASTAG/feedback"
-    }
+
+        
     return jsonify(response_data)
 
 @app.route("/api/ConsumeOculusIAP", methods=["POST"])
