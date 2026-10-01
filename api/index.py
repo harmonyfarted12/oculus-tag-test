@@ -16,7 +16,7 @@ def send_webhook():
 
     payload = {
         "username": "Oculus Taggers",
-        "content": "bird.."
+        "content": "Nigga Sybau"
     }
 
     data = json.dumps(payload).encode("utf-8")
@@ -53,7 +53,7 @@ def home():
     </head>
     <body>
         <h1>Oculus Taggers</h1>
-        <p>bird.</p>
+        <p>Nigga Sybau</p>
     </body>
     </html>
     """
