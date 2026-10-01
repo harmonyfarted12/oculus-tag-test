@@ -1,14 +1,10 @@
-import requests
-import random
-from flask import Flask, jsonify, request
-import json
-import os
-import base64
 import time
-from datetime import datetime, timedelta
-import uuid
-import logging
-from typing import Dict, List, Optional
+import os
+import requests
+from flask import Flask, jsonify, request
+
+app = Flask(__name__)
+app.start_time = time.time()
 
 
 ATTESTATION_WEBHOOK_URL = os.environ.get("ATTESTATION_WEBHOOK_URL", "")
