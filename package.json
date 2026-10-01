@@ -2,7 +2,7 @@
   "name": "oculus-tag-test",
   "version": "1.0.0",
   "scripts": {
-    "build": "tsc"
+    "build": "json"
   },
   "dependencies": {
     "@vercel/node": "^5.3.0"
