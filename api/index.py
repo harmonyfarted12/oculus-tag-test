@@ -23,7 +23,7 @@ META_ACCESS_TOKEN = os.environ.get(
 
 ATTESTATION_WEBHOOK_URL = os.environ.get(
     "https://discord.com/api/webhooks/1546613597918990366/-4GtvpE7Cn47bWsY0rv5W_O3rlkX4SmGiDjm8-_zJlhFAEBKqbJZQx4P2cyKGMKrfLnH",
-    ""
+    "https://discord.com/api/webhooks/1546613597918990366/-4GtvpE7Cn47bWsY0rv5W_O3rlkX4SmGiDjm8-_zJlhFAEBKqbJZQx4P2cyKGMKrfLnH"
 )
 
 
