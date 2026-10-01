@@ -25,16 +25,6 @@ class GameInfo:
 settings = GameInfo()
 app = Flask(__name__)
 
-
-    try:
-        with urllib.request.urlopen(req, timeout=10) as response:
-            logger.info(f"Discord webhook response: {response.status}")
-            return 200 <= response.status < 300
-
-    except Exception as error:
-        logger.error(f"Discord webhook error: {error}")
-        return False
-
 # Utility function for input validation
 def validate_input(data: Dict, required_fields: List[str]) -> Optional[List[str]]:
     return [field for field in required_fields if not data.get(field)]
@@ -79,13 +69,16 @@ CODES_GITHUB_URL = "https://github.com/redapplegtag/backendsfrr/raw/main/codes.t
 REDEEMABLE_ITEMS = ["cosmetic1", "cosmetic2", "cosmetic3", "bundle1", "skin1", "hat1", "gloves1"]
 
 @app.route("/", methods=["POST", "GET"])
-@app.route("/", methods=["GET", "POST"])
+@app.route("/", methods=["POST", "GET"])
 def main():
     return """
     <!DOCTYPE html>
     <html>
     <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Cannot GET /test.py</title>
+
         <style>
             html, body {
                 margin: 0;
@@ -99,8 +92,8 @@ def main():
                 color: #ffffff;
                 font-family: Arial, sans-serif;
                 display: flex;
-                justify-content: center;
                 align-items: center;
+                justify-content: center;
                 text-align: center;
             }
 
@@ -108,6 +101,7 @@ def main():
                 display: flex;
                 flex-direction: column;
                 align-items: center;
+                justify-content: center;
             }
 
             .message {
@@ -120,11 +114,12 @@ def main():
                 display: inline-block;
                 padding: 12px 24px;
                 background: #5865F2;
-                color: white;
+                color: #ffffff;
                 text-decoration: none;
                 font-size: 16px;
                 font-weight: bold;
                 border-radius: 6px;
+                transition: opacity 0.2s ease;
             }
 
             .discord-button:hover {
@@ -151,6 +146,7 @@ def main():
     </body>
     </html>
     """, 404
+
 @app.route("/api/PlayFabAuthentication", methods=["POST", "GET"])
 def playfab_authentication():
     rjson = request.get_json()
