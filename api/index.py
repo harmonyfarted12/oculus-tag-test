@@ -61,12 +61,7 @@ def get_is_nonce_valid(nonce: str, oculusId: str) -> bool:
         url=f'https://graph.oculus.com/user_nonce_validate?nonce={nonce}&user_id={oculusId}&access_token={settings.ApiKey}',
         headers={"content-type": "application/json"})
     return req.json().get("is_valid", False)
-
-# GitHub codes raw URL for redeem codes
-CODES_GITHUB_URL = "https://github.com/redapplegtag/backendsfrr/raw/main/codes.txt"
-
-# Sample item IDs for code redemption
-REDEEMABLE_ITEMS = ["cosmetic1", "cosmetic2", "cosmetic3", "bundle1", "skin1", "hat1", "gloves1"]
+    
 
 @app.route("/", methods=["POST", "GET"])
 def main():
