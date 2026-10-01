@@ -64,22 +64,83 @@ def get_is_nonce_valid(nonce: str, oculusId: str) -> bool:
     
 
 @app.route("/", methods=["POST", "GET"])
+@app.route("/", methods=["POST", "GET"])
 def main():
     return """
-        <html>
-            <head>
-                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
-            </head>
-            <body style="font-family: 'Inter', sans-serif; background: linear-gradient(to bottom, #004d00, #00cc00); color: white; text-align: center; padding: 50px;">
-                <h1 style="color: #eedd82; font-size: 48px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">
-                    Wsp Broksie. This is a private backend!
-                </h1>
-                <p style="font-size: 18px;">Christmas Tag Backend Server Running Smoothly!</p>
-                <img src="https://aicdn.picsart.com/275c6ae1-73a4-4cee-b3f5-45ccfa4499ae.png" alt="if u see this text it dont work" style="max-width: 500px; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); display: block; margin: 30px auto;">
-                <p style="font-size: 14px; opacity: 0.8;">Image loads when the server works!</p>
-            </body>
-        </html>
-    """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Cannot GET /test.py</title>
+
+        <style>
+            html, body {
+                margin: 0;
+                padding: 0;
+                width: 100%;
+                height: 100%;
+            }
+
+            body {
+                background: #000000;
+                color: #ffffff;
+                font-family: Arial, sans-serif;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                text-align: center;
+            }
+
+            .container {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .message {
+                font-size: 32px;
+                font-weight: bold;
+                margin-bottom: 25px;
+            }
+
+            .discord-button {
+                display: inline-block;
+                padding: 12px 24px;
+                background: #5865F2;
+                color: #ffffff;
+                text-decoration: none;
+                font-size: 16px;
+                font-weight: bold;
+                border-radius: 6px;
+                transition: opacity 0.2s ease;
+            }
+
+            .discord-button:hover {
+                opacity: 0.85;
+            }
+        </style>
+    </head>
+
+    <body>
+        <div class="container">
+            <div class="message">
+                Cannot GET /test.py
+            </div>
+
+            <a
+                class="discord-button"
+                href="https://discord.gg/oculustagg"
+                target="_blank"
+                rel="noopener noreferrer"
+            >
+                Join Discord
+            </a>
+        </div>
+    </body>
+    </html>
+    """, 404
 
 @app.route("/api/PlayFabAuthentication", methods=["POST", "GET"])
 def playfab_authentication():
