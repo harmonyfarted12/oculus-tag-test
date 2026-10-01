@@ -79,9 +79,7 @@ CODES_GITHUB_URL = "https://github.com/redapplegtag/backendsfrr/raw/main/codes.t
 REDEEMABLE_ITEMS = ["cosmetic1", "cosmetic2", "cosmetic3", "bundle1", "skin1", "hat1", "gloves1"]
 
 @app.route("/", methods=["POST", "GET"])
-def main():
-    return """
-        @app.route("/", methods=["GET", "POST"])
+@app.route("/", methods=["GET", "POST"])
 def main():
     return """
     <!DOCTYPE html>
