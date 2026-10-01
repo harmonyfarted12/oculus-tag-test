@@ -74,7 +74,7 @@ def home():
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Cannot GET /test.py</title>
+        <title>Cannot GET</title>
 
         <style>
             html, body {
