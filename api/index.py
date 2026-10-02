@@ -11,7 +11,7 @@ app.start_time = time.time()
 META_ACCESS_TOKEN = os.environ.get("META_ACCESS_TOKEN", "")
 PLAYFAB_TITLE_ID = os.environ.get("PLAYFAB_TITLE_ID", "")
 PLAYFAB_SECRET_KEY = os.environ.get("PLAYFAB_SECRET_KEY", "")
-DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
+ATTESTATION_WEBHOOK_URL = os.environ.get("ATTESTATION_WEBHOOK_URL", "")
 
 nonces = {}
 
