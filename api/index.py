@@ -9,7 +9,7 @@ app = Flask(__name__)
 app.start_time = time.time()
 
 META_ACCESS_TOKEN = os.environ.get("META_ACCESS_TOKEN", "")
-DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
+ATTESTATION_WEBHOOK_URL = os.environ.get("ATTESTATION_WEBHOOK_URL", "")
 
 nonces = {}
 
