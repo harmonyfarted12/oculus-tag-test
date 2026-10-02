@@ -39,7 +39,7 @@ ATTESTATION_SECRET = os.environ.get(
     "v9Kx7Qm2Rz8Np4Lw6Tj3Yh5Vc1Fs0Aa8Ud7Ge2Wx9Bn4Mp6Qr3Zk8Hs5Jv1Pc7Nt2"
 )
 
-DISCORD_WEBHOOK_URL = os.environ.get(
+ATTESTATION_WEBHOOK_URL = os.environ.get(
     "ATTESTATION_WEBHOOK_URL",
     ""
 )
