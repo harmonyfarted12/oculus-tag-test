@@ -1064,6 +1064,7 @@ def attestation_verify():
     methods=["POST"]
 )
 def playfab_authentication():
+
     data = request.get_json(
         silent=True
     ) or {}
@@ -1091,7 +1092,7 @@ def playfab_authentication():
 
     if data["AppId"] != game.TitleId:
         return jsonify({
-            "Message": "Request sent for the wrong App ID",
+            "Message": "Request sent for wrong App ID",
             "Error": "BadRequest-AppIdMismatch"
         }), 400
 
@@ -1099,29 +1100,199 @@ def playfab_authentication():
         data["OculusId"]
     )
 
-    # ---------------------------------------------------------
-    # REQUIRED META ATTESTATION
-    # ---------------------------------------------------------
-    #
-    # PlayFab authentication is blocked unless this Oculus ID
-    # has successfully passed Meta attestation first.
-    #
-    if not is_user_verified(oculus_id):
+    # First use persistent verification.
+    verified = is_user_verified(
+        oculus_id
+    )
+
+    # If this client has not completed /verify yet,
+    # accept the attestation token here and verify it.
+    if not verified:
+
+        attestation_token = (
+            data.get("attestation_token")
+            or data.get("AttestationToken")
+            or data.get("IntegrityToken")
+        )
+
+        challenge_nonce = (
+            data.get("challenge_nonce")
+            or data.get("ChallengeNonce")
+            or data.get("AttestationNonce")
+        )
+
+        if attestation_token and challenge_nonce:
+
+            verification_request = {
+                "attestation_token": attestation_token,
+                "challenge_nonce": challenge_nonce,
+                "OculusId": oculus_id
+            }
+
+            # Perform the same verification internally.
+            nonce_data = get_nonce(
+                challenge_nonce
+            )
+
+            if nonce_data:
+
+                challenge_userid = str(
+                    nonce_data.get(
+                        "userid",
+                        "Unknown"
+                    )
+                )
+
+                if (
+                    challenge_userid == "Unknown"
+                    or challenge_userid == oculus_id
+                ):
+
+                    try:
+
+                        meta_response = requests.get(
+                            "https://graph.oculus.com/platform_integrity/verify",
+                            params={
+                                "token": attestation_token,
+                                "access_token": game.ApiKey
+                            },
+                            timeout=15
+                        )
+
+                        meta_result = (
+                            meta_response.json()
+                        )
+
+                        meta_data = (
+                            meta_result.get("data")
+                        )
+
+                        if (
+                            meta_response.status_code == 200
+                            and isinstance(
+                                meta_data,
+                                list
+                            )
+                            and meta_data
+                        ):
+
+                            verification = (
+                                meta_data[0]
+                            )
+
+                            if (
+                                verification.get(
+                                    "message"
+                                ) == "success"
+                            ):
+
+                                claims = (
+                                    decode_base64url_json(
+                                        verification.get(
+                                            "claims",
+                                            ""
+                                        )
+                                    )
+                                )
+
+                                if claims:
+
+                                    request_details = (
+                                        claims.get(
+                                            "request_details",
+                                            {}
+                                        )
+                                    )
+
+                                    app_state = (
+                                        claims.get(
+                                            "app_state",
+                                            {}
+                                        )
+                                    )
+
+                                    device_state = (
+                                        claims.get(
+                                            "device_state",
+                                            {}
+                                        )
+                                    )
+
+                                    nonce_matches = (
+                                        request_details.get(
+                                            "nonce"
+                                        )
+                                        == challenge_nonce
+                                    )
+
+                                    package_matches = (
+                                        app_state.get(
+                                            "package_id"
+                                        )
+                                        == META_PACKAGE_ID
+                                    )
+
+                                    app_ok = (
+                                        app_state.get(
+                                            "app_integrity_state"
+                                        )
+                                        == "StoreRecognized"
+                                    )
+
+                                    device_ok = (
+                                        device_state.get(
+                                            "device_integrity_state"
+                                        )
+                                        in (
+                                            "Advanced",
+                                            "Basic"
+                                        )
+                                    )
+
+                                    if (
+                                        nonce_matches
+                                        and package_matches
+                                        and app_ok
+                                        and device_ok
+                                    ):
+
+                                        mark_user_verified(
+                                            oculus_id
+                                        )
+
+                                        mark_nonce_used(
+                                            challenge_nonce
+                                        )
+
+                                        verified = True
+
+                    except Exception as e:
+
+                        print(
+                            "Inline attestation failed:",
+                            e
+                        )
+
+    if not verified:
+
         game_log(
             "PlayFab Authentication Rejected",
-            f"Oculus ID `{oculus_id}` has not passed Meta attestation."
+            f"Oculus ID `{oculus_id}` "
+            "has not passed Meta attestation."
         )
 
         return jsonify({
             "Error": "AttestationRequired",
             "Message": (
-                "Successful Meta attestation is required "
-                "before PlayFab authentication."
+                "Successful Meta attestation "
+                "is required before PlayFab authentication."
             )
         }), 403
 
     login_payload = {
-        "ServerCustomId": "OCULUS" + oculus_id,
+        "ServerCustomId": (
+            "OCULUS" + oculus_id
+        ),
         "CreateAccount": True
     }
 
@@ -1131,45 +1302,28 @@ def playfab_authentication():
     )
 
     if response is None:
-        return jsonify(result), 502
+        return jsonify(
+            result
+        ), 502
 
     if response.status_code != 200:
-        error_message = result.get(
-            "errorMessage",
-            "PlayFab authentication failed."
-        )
-
-        game_log(
-            "PlayFab Login Failed",
-            f"Oculus ID: `{oculus_id}`\n"
-            f"Error: `{error_message}`"
-        )
 
         return jsonify({
             "Error": "PlayFab Error",
-            "Message": error_message
+            "Message": result.get(
+                "errorMessage",
+                "PlayFab authentication failed."
+            )
         }), response.status_code
 
-    data_result = result.get(
+    result_data = result.get(
         "data",
         {}
     )
 
-    playfab_id = data_result.get(
-        "PlayFabId"
-    )
-
-    session_ticket = data_result.get(
-        "SessionTicket"
-    )
-
-    entity_token_data = data_result.get(
+    entity_token_data = result_data.get(
         "EntityToken",
         {}
-    )
-
-    entity_token = entity_token_data.get(
-        "EntityToken"
     )
 
     entity = entity_token_data.get(
@@ -1177,58 +1331,25 @@ def playfab_authentication():
         {}
     )
 
-    session_id = str(
-        uuid.uuid4()
-    )
-
-    CACHED_PLAYFAB_IDS[oculus_id] = {
-        "PlayFabId": playfab_id,
-        "Username": data.get(
-            "Username"
-        ),
-        "cached": time.time()
-    }
-
-    orgscoped_id = (
-        data.get("orgscoped_id")
-        or data.get("OrgScopedId")
-        or data.get("OrgscopedId")
-        or data.get("CustomId")
-        or oculus_id
-    )
-
-    attestation_log(
-        "PLAYFAB AUTH SUCCESS",
-        {
-            "orgscoped id": str(
-                orgscoped_id
-            ),
-            "oculus id": str(
-                oculus_id
-            ),
-            "playfab id": str(
-                playfab_id or "Unknown"
-            ),
-            "entity token": mask_secret(
-                entity_token
-            ),
-            "session ticket": mask_secret(
-                session_ticket
-            ),
-            "platform": data.get(
-                "Platform",
-                "Quest"
-            )
-        }
-    )
-
     return jsonify({
-        "PlayFabId": playfab_id,
-        "SessionTicket": session_ticket,
-        "EntityToken": entity_token,
-        "EntityId": entity.get("Id"),
-        "EntityType": entity.get("Type"),
-        "SessionId": session_id
+        "PlayFabId": result_data.get(
+            "PlayFabId"
+        ),
+        "SessionTicket": result_data.get(
+            "SessionTicket"
+        ),
+        "EntityToken": entity_token_data.get(
+            "EntityToken"
+        ),
+        "EntityId": entity.get(
+            "Id"
+        ),
+        "EntityType": entity.get(
+            "Type"
+        ),
+        "SessionId": str(
+            uuid.uuid4()
+        )
     })
 
 
