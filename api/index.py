@@ -9,39 +9,23 @@ app = Flask(__name__)
 app.start_time = time.time()
 
 META_ACCESS_TOKEN = os.environ.get("META_ACCESS_TOKEN", "")
-PLAYFAB_TITLE_ID = os.environ.get("PLAYFAB_TITLE_ID", "")
-PLAYFAB_SECRET_KEY = os.environ.get("PLAYFAB_SECRET_KEY", "")
-ATTESTATION_WEBHOOK_URL = os.environ.get("ATTESTATION_WEBHOOK_URL", "")
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
 nonces = {}
 
 
-def discord_log(title, message, level="info"):
+def send_discord_log(title, message):
     if not DISCORD_WEBHOOK_URL:
         return
 
-    colors = {
-        "info": 3447003,
-        "success": 5763719,
-        "warning": 16776960,
-        "error": 15548997
-    }
-
     payload = {
-        "embeds": [
-            {
-                "title": title,
-                "description": message,
-                "color": colors.get(level, colors["info"]),
-                "timestamp": time.strftime(
-                    "%Y-%m-%dT%H:%M:%SZ",
-                    time.gmtime()
-                ),
-                "footer": {
-                    "text": "Oculus Tag Backend"
-                }
+        "embeds": [{
+            "title": title,
+            "description": message,
+            "footer": {
+                "text": "Oculus Tag Backend"
             }
-        ]
+        }]
     }
 
     try:
@@ -54,41 +38,8 @@ def discord_log(title, message, level="info"):
         pass
 
 
-def generate_nonce():
-    nonce = secrets.token_urlsafe(32)
-
-    while len(nonce) < 22 or len(nonce) > 172:
-        nonce = secrets.token_urlsafe(32)
-
-    nonces[nonce] = {
-        "created": time.time(),
-        "used": False
-    }
-
-    return nonce
-
-
-def cleanup_nonces():
-    now = time.time()
-
-    expired = [
-        nonce
-        for nonce, data in nonces.items()
-        if now - data["created"] > 600
-    ]
-
-    for nonce in expired:
-        nonces.pop(nonce, None)
-
-
 @app.route("/", methods=["GET", "POST"])
 def home():
-    discord_log(
-        "Backend Request",
-        f"GET/POST request received from {request.remote_addr}",
-        "info"
-    )
-
     return jsonify({
         "success": True,
         "status": "online",
@@ -99,12 +50,6 @@ def home():
 
 @app.route("/api/test", methods=["GET", "POST"])
 def test():
-    discord_log(
-        "API Test",
-        f"Test endpoint accessed from {request.remote_addr}",
-        "info"
-    )
-
     return jsonify({
         "success": True,
         "message": "Oculus Tag Backend is working."
@@ -112,27 +57,27 @@ def test():
 
 
 @app.route("/api/GetServerStatus", methods=["GET"])
-def get_server_status():
-    uptime = int(time.time() - app.start_time)
-
+def server_status():
     return jsonify({
         "success": True,
         "status": "online",
         "server": "Oculus Tag Backend",
-        "uptime": uptime
+        "uptime": int(time.time() - app.start_time)
     })
 
 
 @app.route("/api/attestation/challenge", methods=["GET", "POST"])
-def get_challenge():
-    cleanup_nonces()
+def challenge():
+    nonce = secrets.token_urlsafe(32)
 
-    nonce = generate_nonce()
+    nonces[nonce] = {
+        "created": time.time(),
+        "used": False
+    }
 
-    discord_log(
+    send_discord_log(
         "Attestation Challenge",
-        f"New challenge generated.\nIP: `{request.remote_addr}`",
-        "info"
+        "A new attestation challenge was generated."
     )
 
     return jsonify({
@@ -151,71 +96,47 @@ def verify():
             "method": "POST"
         })
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+
+    if not data:
+        return jsonify({
+            "success": False,
+            "error": "Missing JSON body."
+        }), 400
 
     attestation_token = data.get("attestation_token")
     challenge_nonce = data.get("challenge_nonce")
 
     if not attestation_token:
-        discord_log(
-            "Attestation Failed",
-            f"Missing attestation token.\nIP: `{request.remote_addr}`",
-            "warning"
-        )
-
         return jsonify({
             "success": False,
-            "error": "Missing attestation_token"
+            "error": "Missing attestation_token."
         }), 400
 
     if not challenge_nonce:
-        discord_log(
-            "Attestation Failed",
-            f"Missing challenge nonce.\nIP: `{request.remote_addr}`",
-            "warning"
-        )
-
         return jsonify({
             "success": False,
-            "error": "Missing challenge_nonce"
+            "error": "Missing challenge_nonce."
         }), 400
 
-    nonce_data = nonces.get(challenge_nonce)
+    nonce = nonces.get(challenge_nonce)
 
-    if not nonce_data:
-        discord_log(
-            "Attestation Failed",
-            f"Invalid or expired challenge nonce.\nIP: `{request.remote_addr}`",
-            "warning"
-        )
-
+    if not nonce:
         return jsonify({
             "success": False,
-            "error": "Invalid or expired challenge nonce"
+            "error": "Invalid challenge nonce."
         }), 400
 
-    if nonce_data["used"]:
-        discord_log(
-            "Attestation Failed",
-            f"Nonce was already used.\nIP: `{request.remote_addr}`",
-            "warning"
-        )
-
+    if nonce["used"]:
         return jsonify({
             "success": False,
-            "error": "Challenge nonce has already been used"
+            "error": "Challenge nonce already used."
         }), 400
 
     if not META_ACCESS_TOKEN:
-        discord_log(
-            "Backend Configuration Error",
-            "META_ACCESS_TOKEN is not configured.",
-            "error"
-        )
-
         return jsonify({
             "success": False,
-            "error": "META_ACCESS_TOKEN is not configured"
+            "error": "META_ACCESS_TOKEN is not configured."
         }), 500
 
     try:
@@ -231,38 +152,27 @@ def verify():
         try:
             result = response.json()
         except ValueError:
-            discord_log(
-                "Meta Verification Error",
-                f"Meta returned an invalid response.\nHTTP: `{response.status_code}`",
-                "error"
-            )
-
             return jsonify({
                 "success": False,
-                "error": "Meta returned an invalid response"
+                "error": "Meta returned an invalid response."
             }), 502
 
         if response.status_code != 200:
-            discord_log(
+            send_discord_log(
                 "Attestation Rejected",
-                f"Meta rejected the attestation token.\n"
-                f"HTTP: `{response.status_code}`\n"
-                f"IP: `{request.remote_addr}`",
-                "warning"
+                "Meta rejected an attestation token."
             )
 
             return jsonify({
                 "success": False,
-                "error": "Meta rejected the attestation token"
+                "error": "Meta rejected the attestation token."
             }), 401
 
-        nonce_data["used"] = True
+        nonce["used"] = True
 
-        discord_log(
+        send_discord_log(
             "Attestation Verified",
-            f"Quest attestation successfully verified.\n"
-            f"IP: `{request.remote_addr}`",
-            "success"
+            "Oculus Tag attestation was successfully verified."
         )
 
         return jsonify({
@@ -271,28 +181,26 @@ def verify():
             "meta": result
         })
 
-    except requests.RequestException as e:
-        discord_log(
+    except requests.RequestException:
+        send_discord_log(
             "Meta Connection Error",
-            f"Could not contact Meta.\nError: `{str(e)}`",
-            "error"
+            "The backend could not contact Meta."
         )
 
         return jsonify({
             "success": False,
-            "error": "Could not contact Meta"
+            "error": "Could not contact Meta."
         }), 502
 
     except Exception as e:
-        discord_log(
+        send_discord_log(
             "Backend Error",
-            f"Internal server error.\nError: `{str(e)}`",
-            "error"
+            f"Internal error: {str(e)}"
         )
 
         return jsonify({
             "success": False,
-            "error": "Internal server error"
+            "error": "Internal server error."
         }), 500
 
 
