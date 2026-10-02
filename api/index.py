@@ -571,34 +571,21 @@ def get_server_config():
 
 @app.route("/api/attestation/challenge", methods=["GET"])
 def attestation_challenge():
-    if not ATTESTATION_SECRET:
-        return jsonify({
-            "success": False,
-            "error": "Attestation secret is not configured."
-        }), 500
+    oculus_id = request.args.get("OculusId", "").strip()
 
-    oculus_id = get_value(
-        request.args,
-        "OculusId",
-        "oculusId",
-        "oculus_id"
-    )
-
-    if not validate_input(oculus_id, 100):
+    if not oculus_id:
         return jsonify({
             "success": False,
             "error": "OculusId is required."
         }), 400
 
-    challenge = generate_challenge(
-        oculus_id
-    )
+    challenge = generate_challenge(oculus_id)
 
-    if not challenge:
-        return jsonify({
-            "success": False,
-            "error": "Unable to generate attestation challenge."
-        }), 500
+    send_discord_log(
+        f"New Attestation Nonce\n"
+        f"Oculus ID: `{oculus_id}`\n"
+        f"Challenge created successfully."
+    )
 
     return jsonify({
         "success": True,
