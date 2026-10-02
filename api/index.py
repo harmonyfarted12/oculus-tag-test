@@ -1159,31 +1159,8 @@ def playfab_authentication():
 )
 def title_data():
     return jsonify({
-        "MaxPlayersPerRoom": 8,
-        "DefaultGameMode": "Tag",
-        "EnableVoiceChat": False,
-        "ChatFilterEnabled": False,
-        "MaxChatLength": 100,
-        "SpawnProtectionTime": 5,
-        "GameRoundDuration": 300,
-        "RespawnDelay": 3,
-        "TagCooldown": 1,
-        "CurrencyMultiplier": 1.0,
-        "DailyLoginReward": 100,
-        "XPPerKill": 50,
-        "LevelCap": 100,
-        "EnableAchievements": False,
-        "AntiCheatEnabled": False,
-        "FriendLimit": 50,
-        "PartySizeLimit": 4,
-        "MatchmakingTimeout": 30,
-        "PingThreshold": 200,
-        "RegionPriority": [
-            "US",
-            "EU",
-            "AS"
-        ],
-        "MaintenanceMode": False,
+
+        
         "ServerVersion": "1.0.0",
         "ClientMinVersion": "1.0.0",
         "MOTD": "discord.gg/oculustagg"
