@@ -22,6 +22,8 @@ class GameInfo:
         self.TitleId: str = "C7E30"
         self.SecretKey: str = "PEKS8YH8HTOAYATD93F4MS4N4BXNKOBRY4PJMYPWCYOOYE7I78"
         self.ApiKey: str = "OC|1368813259653754|673098554f8a983dc591cf6114427955"
+        META_PACKAGE_ID = "com.pootag.pootag"
+        META_CERT_SHA256 = "a40da80a59d170caa950cf15c18c454d47a39b26989d8b640ecd745ba71bf5dc"
 
     def get_auth_headers(self):
         return {
