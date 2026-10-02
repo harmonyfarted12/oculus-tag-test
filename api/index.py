@@ -1,13 +1,17 @@
-import time
-import os
 import requests
+import random
 from flask import Flask, jsonify, request
+import json
+import os
+import base64
+from datetime import datetime, timedelta
+import uuid
+import logging
+from typing import Dict, List, Optional
 
-app = Flask(__name__)
-app.start_time = time.time()
-
-
-ATTESTATION_WEBHOOK_URL = os.environ.get("ATTESTATION_WEBHOOK_URL", "")
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class GameInfo:
     def __init__(self):
@@ -57,121 +61,30 @@ def get_is_nonce_valid(nonce: str, oculusId: str) -> bool:
         url=f'https://graph.oculus.com/user_nonce_validate?nonce={nonce}&user_id={oculusId}&access_token={settings.ApiKey}',
         headers={"content-type": "application/json"})
     return req.json().get("is_valid", False)
-    
+
+# GitHub codes raw URL for redeem codes
+CODES_GITHUB_URL = "https://github.com/redapplegtag/backendsfrr/raw/main/codes.txt"
+
+# Sample item IDs for code redemption
+REDEEMABLE_ITEMS = ["cosmetic1", "cosmetic2", "cosmetic3", "bundle1", "skin1", "hat1", "gloves1"]
 
 @app.route("/", methods=["POST", "GET"])
-import time
-
-DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
-
-settings = GameInfo()
-app = Flask(__name__)
-app.start_time = time.time()
-
-
-@app.route("/", methods=["GET", "POST"])
 def main():
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr)
-
-    if ip and "," in ip:
-        ip = ip.split(",")[0].strip()
-
-    # Discord logging
-    if DISCORD_WEBHOOK_URL:
-        try:
-            requests.post(
-                DISCORD_WEBHOOK_URL,
-                json={
-                    "embeds": [{
-                        "title": "Oculus Tag Backend Visit",
-                        "description": f"IP: `{ip}`",
-                        "color": 5793266
-                    }]
-                },
-                timeout=5
-            )
-        except requests.RequestException as e:
-            logger.error(f"Discord webhook error: {e}")
-
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>Cannot GET Oculus Tag Backend</title>
-        <style>
-            html, body {{
-                margin: 0;
-                padding: 0;
-                width: 100%;
-                height: 100%;
-            }}
-
-            body {{
-                background: #000000;
-                color: #ffffff;
-                font-family: Arial, sans-serif;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                text-align: center;
-            }}
-
-            .container {{
-                text-align: center;
-            }}
-
-            .message {{
-                font-size: 32px;
-                font-weight: bold;
-                margin-bottom: 15px;
-            }}
-
-            .ip {{
-                color: #aaaaaa;
-                font-size: 18px;
-                margin-bottom: 25px;
-            }}
-
-            .discord-button {{
-                display: inline-block;
-                padding: 12px 24px;
-                background: #5865F2;
-                color: white;
-                text-decoration: none;
-                font-size: 16px;
-                font-weight: bold;
-                border-radius: 6px;
-            }}
-
-            .discord-button:hover {{
-                opacity: 0.85;
-            }}
-        </style>
-    </head>
-
-    <body>
-        <div class="container">
-            <div class="message">
-                Cannot GET Oculus Tag Backend
-            </div>
-
-            <div class="ip">
-                IP: {ip}
-            </div>
-
-            <a
-                class="discord-button"
-                href="https://discord.gg/oculustagg"
-                target="_blank"
-                rel="noopener noreferrer"
-            >
-                Join Discord
-            </a>
-        </div>
-    </body>
-    </html>
-    """, 404
+    return """
+        <html>
+            <head>
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+            </head>
+            <body style="font-family: 'Inter', sans-serif; background: linear-gradient(to bottom, #004d00, #00cc00); color: white; text-align: center; padding: 50px;">
+                <h1 style="color: #eedd82; font-size: 48px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">
+                    Wsp Broksie. This is a private backend!
+                </h1>
+                <p style="font-size: 18px;">Christmas Tag Backend Server Running Smoothly!</p>
+                <img src="https://aicdn.picsart.com/275c6ae1-73a4-4cee-b3f5-45ccfa4499ae.png" alt="if u see this text it dont work" style="max-width: 500px; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); display: block; margin: 30px auto;">
+                <p style="font-size: 14px; opacity: 0.8;">Image loads when the server works!</p>
+            </body>
+        </html>
+    """
 
 @app.route("/api/PlayFabAuthentication", methods=["POST", "GET"])
 def playfab_authentication():
@@ -651,7 +564,233 @@ def report_player():
     logger.info(f"Player {rjson.get('ReporterId')} reported {rjson.get('ReportedId')} for {rjson.get('Reason')}")
     return jsonify({"success": True, "message": "Report submitted"}), 200
 
+@app.route("/api/AddFriend", methods=["POST"])
+def add_friend():
+    rjson = request.get_json()
+    required_fields = ["PlayFabId", "FriendId"]
+    missing_fields = validate_input(rjson, required_fields)
+    if missing_fields:
+        return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
+    return return_function_json("AddFriend", {"FriendPlayFabId": rjson.get("FriendId")}, rjson.get("PlayFabId"))
 
+@app.route("/api/RemoveFriend", methods=["POST"])
+def remove_friend():
+    rjson = request.get_json()
+    required_fields = ["PlayFabId", "FriendId"]
+    missing_fields = validate_input(rjson, required_fields)
+    if missing_fields:
+        return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
+    return return_function_json("RemoveFriend", {"FriendPlayFabId": rjson.get("FriendId")}, rjson.get("PlayFabId"))
+
+@app.route("/api/GetFriendsList", methods=["POST"])
+def get_friends_list():
+    rjson = request.get_json()
+    playfab_id = rjson.get("PlayFabId")
+    if not playfab_id:
+        return jsonify({"error": "Missing PlayFabId"}), 400
+    return return_function_json("GetFriendsList", {}, playfab_id)
+
+@app.route("/api/CreateParty", methods=["POST"])
+def create_party():
+    rjson = request.get_json()
+    playfab_id = rjson.get("PlayFabId")
+    if not playfab_id:
+        return jsonify({"error": "Missing PlayFabId"}), 400
+    party_id = generate_session_id()
+    logger.info(f"Created party {party_id} for {playfab_id}")
+    return jsonify({"success": True, "PartyId": party_id}), 200
+
+@app.route("/api/JoinParty", methods=["POST"])
+def join_party():
+    rjson = request.get_json()
+    required_fields = ["PlayFabId", "PartyId"]
+    missing_fields = validate_input(rjson, required_fields)
+    if missing_fields:
+        return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
+    logger.info(f"Player {rjson.get('PlayFabId')} joined party {rjson.get('PartyId')}")
+    return jsonify({"success": True}), 200
+
+@app.route("/api/LeaveParty", methods=["POST"])
+def leave_party():
+    rjson = request.get_json()
+    required_fields = ["PlayFabId", "PartyId"]
+    missing_fields = validate_input(rjson, required_fields)
+    if missing_fields:
+        return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
+    logger.info(f"Player {rjson.get('PlayFabId')} left party {rjson.get('PartyId')}")
+    return jsonify({"success": True}), 200
+
+@app.route("/api/InviteToParty", methods=["POST"])
+def invite_to_party():
+    rjson = request.get_json()
+    required_fields = ["PlayFabId", "FriendId", "PartyId"]
+    missing_fields = validate_input(rjson, required_fields)
+    if missing_fields:
+        return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
+    logger.info(f"Player {rjson.get('PlayFabId')} invited {rjson.get('FriendId')} to party {rjson.get('PartyId')}")
+    return jsonify({"success": True}), 200
+
+@app.route("/api/GetDailyQuests", methods=["POST"])
+def get_daily_quests():
+    rjson = request.get_json()
+    playfab_id = rjson.get("PlayFabId")
+    if not playfab_id:
+        return jsonify({"error": "Missing PlayFabId"}), 400
+    return jsonify({"quests": [{"id": "quest1", "name": "Tag 5 Players", "reward": 100}]}), 200
+
+@app.route("/api/CompleteQuest", methods=["POST"])
+def complete_quest():
+    rjson = request.get_json()
+    required_fields = ["PlayFabId", "QuestId"]
+    missing_fields = validate_input(rjson, required_fields)
+    if missing_fields:
+        return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
+    return return_function_json("CompleteQuest", {"QuestId": rjson.get("QuestId")}, rjson.get("PlayFabId"))
+
+@app.route("/api/GetAchievements", methods=["POST"])
+def get_achievements():
+    rjson = request.get_json()
+    playfab_id = rjson.get("PlayFabId")
+    if not playfab_id:
+        return jsonify({"error": "Missing PlayFabId"}), 400
+    return return_function_json("GetPlayerAchievements", {}, playfab_id)
+
+@app.route("/api/UnlockAchievement", methods=["POST"])
+def unlock_achievement():
+    rjson = request.get_json()
+    required_fields = ["PlayFabId", "AchievementId"]
+    missing_fields = validate_input(rjson, required_fields)
+    if missing_fields:
+        return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
+    return return_function_json("UnlockAchievement", {"AchievementId": rjson.get("AchievementId")}, rjson.get("PlayFabId"))
+
+@app.route("/api/GetSeasonalEvent", methods=["POST"])
+def get_seasonal_event():
+    return jsonify({
+        "EventName": "WinterFest2025",
+        "StartDate": "2025-12-01",
+        "EndDate": "2026-01-15",
+        "Rewards": ["snow_hat", "ice_gloves"]
+    }), 200
+
+@app.route("/api/SubmitFeedback", methods=["POST"])
+def submit_feedback():
+    rjson = request.get_json()
+    required_fields = ["PlayFabId", "Feedback"]
+    missing_fields = validate_input(rjson, required_fields)
+    if missing_fields:
+        return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
+    logger.info(f"Feedback from {rjson.get('PlayFabId')}: {rjson.get('Feedback')}")
+    return jsonify({"success": True}), 200
+
+@app.route("/api/GetServerStatus", methods=["GET"])
+def get_server_status():
+    return jsonify({
+        "status": "online",
+        "uptime": str(timedelta(seconds=int(time.time() - app.start_time))),
+        "activePlayers": random.randint(100, 1000)
+    }), 200
+
+@app.route("/api/UpdateProfile", methods=["POST"])
+def update_profile():
+    rjson = request.get_json()
+    required_fields = ["PlayFabId", "DisplayName"]
+    missing_fields = validate_input(rjson, required_fields)
+    if missing_fields:
+        return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
+    return return_function_json("UpdateUserTitleDisplayName", {"DisplayName": rjson.get("DisplayName")}, rjson.get("PlayFabId"))
+
+@app.route("/api/GetCosmetics", methods=["POST"])
+def get_cosmetics():
+    rjson = request.get_json()
+    playfab_id = rjson.get("PlayFabId")
+    if not playfab_id:
+        return jsonify({"error": "Missing PlayFabId"}), 400
+    return jsonify({"cosmetics": REDEEMABLE_ITEMS}), 200
+
+@app.route("/api/EquipCosmetic", methods=["POST"])
+def equip_cosmetic():
+    rjson = request.get_json()
+    required_fields = ["PlayFabId", "CosmeticId"]
+    missing_fields = validate_input(rjson, required_fields)
+    if missing_fields:
+        return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
+    logger.info(f"Player {rjson.get('PlayFabId')} equipped cosmetic {rjson.get('CosmeticId')}")
+    return jsonify({"success": True}), 200
+
+@app.route("/api/TradeItems", methods=["POST"])
+def trade_items():
+    rjson = request.get_json()
+    required_fields = ["PlayFabId", "RecipientId", "Items"]
+    missing_fields = validate_input(rjson, required_fields)
+    if missing_fields:
+        return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
+    return return_function_json("TradeItems", {"RecipientId": rjson.get("RecipientId"), "Items": rjson.get("Items")}, rjson.get("PlayFabId"))
+
+@app.route("/api/CreateGuild", methods=["POST"])
+def create_guild():
+    rjson = request.get_json()
+    required_fields = ["PlayFabId", "GuildName"]
+    missing_fields = validate_input(rjson, required_fields)
+    if missing_fields:
+        return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
+    guild_id = generate_session_id()
+    logger.info(f"Guild {guild_id} created by {rjson.get('PlayFabId')}: {rjson.get('GuildName')}")
+    return jsonify({"success": True, "GuildId": guild_id}), 200
+
+@app.route("/api/JoinGuild", methods=["POST"])
+def join_guild():
+    rjson = request.get_json()
+    required_fields = ["PlayFabId", "GuildId"]
+    missing_fields = validate_input(rjson, required_fields)
+    if missing_fields:
+        return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
+    logger.info(f"Player {rjson.get('PlayFabId')} joined guild {rjson.get('GuildId')}")
+    return jsonify({"success": True}), 200
+
+@app.route("/api/GetGuildInfo", methods=["POST"])
+def get_guild_info():
+    rjson = request.get_json()
+    guild_id = rjson.get("GuildId")
+    if not guild_id:
+        return jsonify({"error": "Missing GuildId"}), 400
+    return jsonify({"guild": {"id": guild_id, "name": "SampleGuild", "members": 10}}), 200
+
+@app.route("/api/GetMatchHistory", methods=["POST"])
+def get_match_history():
+    rjson = request.get_json()
+    playfab_id = rjson.get("PlayFabId")
+    if not playfab_id:
+        return jsonify({"error": "Missing PlayFabId"}), 400
+    return jsonify({"matches": [{"id": "match1", "result": "win", "date": "2025-09-11"}]}), 200
+
+@app.route("/api/StartMatchmaking", methods=["POST"])
+def start_matchmaking():
+    rjson = request.get_json()
+    required_fields = ["PlayFabId", "GameMode"]
+    missing_fields = validate_input(rjson, required_fields)
+    if missing_fields:
+        return jsonify({"error": f"Missing fields: {', '.join(missing_fields)}"}), 400
+    logger.info(f"Player {rjson.get('PlayFabId')} started matchmaking for {rjson.get('GameMode')}")
+    return jsonify({"success": True, "MatchId": generate_session_id()}), 200
+
+@app.route("/api/CancelMatchmaking", methods=["POST"])
+def cancel_matchmaking():
+    rjson = request.get_json()
+    playfab_id = rjson.get("PlayFabId")
+    if not playfab_id:
+        return jsonify({"error": "Missing PlayFabId"}), 400
+    logger.info(f"Player {rjson.get('PlayFabId')} cancelled matchmaking")
+    return jsonify({"success": True}), 200
+
+@app.route("/api/GetServerConfig", methods=["GET"])
+def get_server_config():
+    return jsonify({
+        "version": "1.2.3",
+        "maintenance": False,
+        "regions": ["US", "EU", "AS"],
+        "maxPlayers": 1000
+    }), 200
 
 if __name__ == "__main__":
     app.start_time = time.time()
