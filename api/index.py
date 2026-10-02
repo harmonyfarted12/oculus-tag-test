@@ -16,7 +16,7 @@ app = Flask(__name__)
 TITLE_ID = os.environ.get("PLAYFAB_TITLE_ID", "")
 PLAYFAB_SECRET_KEY = os.environ.get("PLAYFAB_SECRET_KEY", "")
 META_ACCESS_TOKEN = os.environ.get("META_ACCESS_TOKEN", "")
-DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
+ATTESTATION_WEBHOOK_URL = os.environ.get("ATTESTATION_WEBHOOK_URL", "")
 
 START_TIME = time.time()
 NONCES = {}
@@ -47,7 +47,7 @@ def validate_input(data, fields):
 def game_log(title, message):
     logger.info("%s: %s", title, message)
 
-    if not DISCORD_WEBHOOK_URL:
+    if not ATTESTATION_WEBHOOK_URL:
         return
 
     payload = {
@@ -68,7 +68,7 @@ def game_log(title, message):
 
     try:
         requests.post(
-            DISCORD_WEBHOOK_URL,
+            ATTESTATION_WEBHOOK_URL,
             json=payload,
             timeout=5
         )
