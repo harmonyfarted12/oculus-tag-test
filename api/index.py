@@ -1186,19 +1186,8 @@ def title_data():
         "MaintenanceMode": False,
         "ServerVersion": "1.0.0",
         "ClientMinVersion": "1.0.0",
-        "MOTD": (
-            "<color=#B000FF>"
-            "WELCOME TO OCULUS TAG!"
-            "</color>\n\n"
-            "<color=#FFFFFF>"
-            "WELCOME TO THE GAME!"
-            "</color>\n"
-            "<color=#A020F0>"
-            "discord.gg/oculustagg"
-            "</color>"
-        )
+        "MOTD": "discord.gg/oculustagg"
     })
-
 
 @app.route(
     "/api/GetAcceptedAgreements",
