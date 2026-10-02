@@ -9,6 +9,9 @@ import requests
 
 from flask import Flask, jsonify, request
 
+from pymongo import MongoClient
+from pymongo.server_api import ServerApi
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("OculusTag")
@@ -16,9 +19,17 @@ logger = logging.getLogger("OculusTag")
 
 class GameInfo:
     def __init__(self):
-        self.TitleId: str = "8A822"  # Playfab Title Id
-        self.SecretKey: str = "PEKS8YH8HTOAYATD93F4MS4N4BXNKOBRY4PJMYPWCYOOYE7I78"  # Playfab Secret Key
-        self.ApiKey: str = "OC|1368813259653754|673098554f8a983dc591cf6114427955"  # Meta App Access Token: OC|App_ID|App_Secret
+        self.TitleId: str = "8A822"
+
+        self.SecretKey: str = os.environ.get(
+            "PLAYFAB_SECRET_KEY",
+            ""
+        )
+
+        self.ApiKey: str = os.environ.get(
+            "META_API_KEY",
+            ""
+        )
 
     def get_auth_headers(self):
         return {
@@ -31,26 +42,33 @@ settings = GameInfo()
 app = Flask(__name__)
 
 
-META_PACKAGE_ID = "com.harmonystudios.oculustaggers"
+META_PACKAGE_ID = (
+    "com.harmonystudios.oculustaggers"
+)
 
 META_CERT_SHA256 = (
-    "5dc7570563e442b4fcb1595e61d957f4dd19e1793514592c6e52eef31157f25e"
+    "5dc7570563e442b4fcb1595e61d957f4dd19e179"
+    "3514592c6e52eef31157f25e"
 )
 
 META_VERIFY_URL = (
-    "https://graph.oculus.com/platform_integrity/verify"
+    "https://graph.oculus.com/"
+    "platform_integrity/verify"
 )
 
 META_DEVICE_BAN_URL = (
-    "https://graph.oculus.com/platform_integrity/device_ban"
+    "https://graph.oculus.com/"
+    "platform_integrity/device_ban"
 )
 
 META_DEVICE_BAN_IDS_URL = (
-    "https://graph.oculus.com/platform_integrity/device_ban_ids"
+    "https://graph.oculus.com/"
+    "platform_integrity/device_ban_ids"
 )
 
 META_DEVICE_BAN_STATUS_URL = (
-    "https://graph.oculus.com/platform_integrity/device_ban_status"
+    "https://graph.oculus.com/"
+    "platform_integrity/device_ban_status"
 )
 
 ATTESTATION_WEBHOOK_URL = os.environ.get(
@@ -58,12 +76,18 @@ ATTESTATION_WEBHOOK_URL = os.environ.get(
     ""
 )
 
+MONGODB_URI = os.environ.get(
+    "MONGODB_URI",
+    ""
+)
+
 START_TIME = time.time()
 
 ATTESTATION_TIMESTAMP_MAX_AGE = 300
 
-MAX_BAN_MINUTES = 52560000
+ATTESTATION_NONCE_TTL = 600
 
+MAX_BAN_MINUTES = 52560000
 
 REDEEMABLE_ITEMS = [
     "ITEM_COSMETIC_1",
@@ -72,8 +96,17 @@ REDEEMABLE_ITEMS = [
 ]
 
 
+mongo_client = None
+mongo_database = None
+attestation_nonces = None
+
+
 def game_log(title, message):
-    logger.info("%s: %s", title, message)
+    logger.info(
+        "%s: %s",
+        title,
+        message
+    )
 
     if not ATTESTATION_WEBHOOK_URL:
         return
@@ -107,14 +140,97 @@ def game_log(title, message):
         )
 
 
-def generate_challenge_nonce():
-    # 16 random bytes produce a 22-character
-    # non-wrapping Base64URL nonce.
-    random_bytes = secrets.token_bytes(16)
+def get_attestation_collection():
+    global mongo_client
+    global mongo_database
+    global attestation_nonces
 
+    if not MONGODB_URI:
+        raise RuntimeError(
+            "MONGODB_URI is not configured"
+        )
+
+    if attestation_nonces is None:
+        mongo_client = MongoClient(
+            MONGODB_URI,
+            server_api=ServerApi(
+                "1",
+                strict=True,
+                deprecation_errors=True
+            ),
+            serverSelectionTimeoutMS=5000
+        )
+
+        mongo_database = mongo_client[
+            "oculus_tag"
+        ]
+
+        attestation_nonces = mongo_database[
+            "attestation_nonces"
+        ]
+
+        attestation_nonces.create_index(
+            "nonce",
+            unique=True
+        )
+
+        attestation_nonces.create_index(
+            "expires_at",
+            expireAfterSeconds=0
+        )
+
+    return attestation_nonces
+
+
+def generate_challenge_nonce():
     return base64.urlsafe_b64encode(
-        random_bytes
+        secrets.token_bytes(16)
     ).decode("ascii").rstrip("=")
+
+
+def create_attestation_nonce():
+    collection = get_attestation_collection()
+
+    nonce = generate_challenge_nonce()
+
+    now = int(time.time())
+
+    collection.insert_one({
+        "nonce": nonce,
+        "created_at": now,
+        "expires_at": (
+            now + ATTESTATION_NONCE_TTL
+        ),
+        "used_at": None
+    })
+
+    return nonce
+
+
+def consume_attestation_nonce(nonce):
+    if not nonce:
+        return False
+
+    collection = get_attestation_collection()
+
+    now = int(time.time())
+
+    result = collection.find_one_and_update(
+        {
+            "nonce": nonce,
+            "used_at": None,
+            "expires_at": {
+                "$gt": now
+            }
+        },
+        {
+            "$set": {
+                "used_at": now
+            }
+        }
+    )
+
+    return result is not None
 
 
 def decode_base64url_json(value):
@@ -145,15 +261,27 @@ def verify_meta_attestation(
     expected_nonce
 ):
     if not attestation_token:
-        return False, "Missing attestation token", None
+        return (
+            False,
+            "Missing attestation token",
+            None
+        )
 
     if not expected_nonce:
-        return False, "Missing challenge nonce", None
+        return (
+            False,
+            "Missing challenge nonce",
+            None
+        )
 
     access_token = get_meta_access_token()
 
     if not access_token:
-        return False, "Meta access token is not configured", None
+        return (
+            False,
+            "Meta access token is not configured",
+            None
+        )
 
     try:
         response = requests.get(
@@ -164,57 +292,100 @@ def verify_meta_attestation(
             },
             timeout=15
         )
-    except requests.RequestException as e:
+    except requests.RequestException:
         logger.exception(
             "Meta attestation request failed"
         )
 
-        return False, "Meta attestation request failed", None
+        return (
+            False,
+            "Meta attestation request failed",
+            None
+        )
 
     try:
         result = response.json()
     except Exception:
-        return False, "Invalid Meta verification response", None
+        return (
+            False,
+            "Invalid Meta verification response",
+            None
+        )
 
     if response.status_code != 200:
-        return False, (
-            f"Meta verification HTTP {response.status_code}"
-        ), result
+        return (
+            False,
+            (
+                f"Meta verification HTTP "
+                f"{response.status_code}"
+            ),
+            result
+        )
 
     data = result.get("data")
 
     if not isinstance(data, list) or not data:
-        return False, "Missing Meta verification data", result
+        return (
+            False,
+            "Missing Meta verification data",
+            result
+        )
 
     verification = data[0]
 
     if not isinstance(verification, dict):
-        return False, "Invalid Meta verification data", result
+        return (
+            False,
+            "Invalid Meta verification data",
+            result
+        )
 
-    message = verification.get("message")
+    message = verification.get(
+        "message"
+    )
 
     if message != "success":
         if message == "invalid signature":
-            return False, "Invalid attestation signature", result
+            return (
+                False,
+                "Invalid attestation signature",
+                result
+            )
 
         if message == "token expired":
-            return False, "Attestation token expired", result
+            return (
+                False,
+                "Attestation token expired",
+                result
+            )
 
-        return False, (
-            f"Meta verification failed: {message}"
-        ), result
+        return (
+            False,
+            f"Meta verification failed: {message}",
+            result
+        )
 
-    encoded_claims = verification.get("claims")
+    encoded_claims = verification.get(
+        "claims"
+    )
 
     if not encoded_claims:
-        return False, "Missing attestation claims", result
+        return (
+            False,
+            "Missing attestation claims",
+            result
+        )
 
     claims = decode_base64url_json(
         encoded_claims
     )
 
     if not isinstance(claims, dict):
-        return False, "Invalid Base64URL claims", result
+        return (
+            False,
+            "Invalid Base64URL claims",
+            result
+        )
 
     request_details = claims.get(
         "request_details"
@@ -228,168 +399,269 @@ def verify_meta_attestation(
         "device_state"
     )
 
-    if not isinstance(request_details, dict):
-        return False, "Missing request_details", claims
+    if not isinstance(
+        request_details,
+        dict
+    ):
+        return (
+            False,
+            "Missing request_details",
+            claims
+        )
 
-    if not isinstance(app_state, dict):
-        return False, "Missing app_state", claims
+    if not isinstance(
+        app_state,
+        dict
+    ):
+        return (
+            False,
+            "Missing app_state",
+            claims
+        )
 
-    if not isinstance(device_state, dict):
-        return False, "Missing device_state", claims
-
-    # --------------------------------
-    # Request details
-    # --------------------------------
+    if not isinstance(
+        device_state,
+        dict
+    ):
+        return (
+            False,
+            "Missing device_state",
+            claims
+        )
 
     claim_nonce = request_details.get(
         "nonce"
     )
 
     if not claim_nonce:
-        return False, "Missing attestation nonce", claims
+        return (
+            False,
+            "Missing attestation nonce",
+            claims
+        )
 
     if claim_nonce != expected_nonce:
-        return False, "Attestation nonce mismatch", claims
+        return (
+            False,
+            "Attestation nonce mismatch",
+            claims
+        )
 
     timestamp = request_details.get(
         "timestamp"
     )
 
     if timestamp is None:
-        return False, "Missing attestation timestamp", claims
+        return (
+            False,
+            "Missing attestation timestamp",
+            claims
+        )
 
     try:
         timestamp = int(timestamp)
     except (TypeError, ValueError):
-        return False, "Invalid attestation timestamp", claims
+        return (
+            False,
+            "Invalid attestation timestamp",
+            claims
+        )
 
     current_time = int(time.time())
 
-    if abs(current_time - timestamp) > ATTESTATION_TIMESTAMP_MAX_AGE:
-        return False, "Attestation timestamp is too old", claims
+    if (
+        abs(
+            current_time - timestamp
+        )
+        > ATTESTATION_TIMESTAMP_MAX_AGE
+    ):
+        return (
+            False,
+            "Attestation timestamp is too old",
+            claims
+        )
 
     expiration = request_details.get(
         "exp"
     )
 
     if expiration is None:
-        return False, "Missing attestation expiration", claims
+        return (
+            False,
+            "Missing attestation expiration",
+            claims
+        )
 
     try:
         expiration = int(expiration)
     except (TypeError, ValueError):
-        return False, "Invalid attestation expiration", claims
+        return (
+            False,
+            "Invalid attestation expiration",
+            claims
+        )
 
     if current_time >= expiration:
-        return False, "Attestation token expired", claims
-
-    # --------------------------------
-    # App state
-    # --------------------------------
+        return (
+            False,
+            "Attestation token expired",
+            claims
+        )
 
     app_integrity_state = app_state.get(
         "app_integrity_state"
     )
 
     if app_integrity_state != "StoreRecognized":
-        return False, (
-            f"App integrity failed: {app_integrity_state}"
-        ), claims
+        return (
+            False,
+            (
+                "App integrity failed: "
+                f"{app_integrity_state}"
+            ),
+            claims
+        )
 
     package_id = app_state.get(
         "package_id"
     )
 
     if package_id != META_PACKAGE_ID:
-        return False, "Package ID mismatch", claims
+        return (
+            False,
+            "Package ID mismatch",
+            claims
+        )
 
     certificate_digests = app_state.get(
         "package_cert_sha256_digest"
     )
 
-    if not isinstance(certificate_digests, list):
-        return False, "Missing package certificate digest", claims
+    if not isinstance(
+        certificate_digests,
+        list
+    ):
+        return (
+            False,
+            "Missing package certificate digest",
+            claims
+        )
 
     normalized_digests = [
-        str(value).replace(":", "").lower()
+        str(value)
+        .replace(":", "")
+        .lower()
         for value in certificate_digests
     ]
 
-    if META_CERT_SHA256.lower() not in normalized_digests:
-        return False, "Package certificate mismatch", claims
+    if (
+        META_CERT_SHA256.lower()
+        not in normalized_digests
+    ):
+        return (
+            False,
+            "Package certificate mismatch",
+            claims
+        )
 
     app_version = app_state.get(
         "version"
     )
 
-    # Version is returned by Meta, but we don't
-    # reject a valid token based only on version.
     logger.info(
         "Attestation app version: %s",
         app_version
     )
 
-    # --------------------------------
-    # Device state
-    # --------------------------------
-
-    device_integrity_state = device_state.get(
-        "device_integrity_state"
+    device_integrity_state = (
+        device_state.get(
+            "device_integrity_state"
+        )
     )
 
     if device_integrity_state not in (
         "Advanced",
         "Basic"
     ):
-        return False, (
-            f"Device integrity failed: "
-            f"{device_integrity_state}"
-        ), claims
+        return (
+            False,
+            (
+                "Device integrity failed: "
+                f"{device_integrity_state}"
+            ),
+            claims
+        )
 
     unique_id = device_state.get(
         "unique_id"
     )
 
     if not unique_id:
-        return False, "Missing device unique_id", claims
+        return (
+            False,
+            "Missing device unique_id",
+            claims
+        )
 
-    security_update_pending_days = device_state.get(
-        "security_update_pending_days"
+    security_update_pending_days = (
+        device_state.get(
+            "security_update_pending_days"
+        )
     )
 
-    # --------------------------------
-    # Device ban
-    # --------------------------------
+    logger.info(
+        "Security update pending days: %s",
+        security_update_pending_days
+    )
 
     device_ban = claims.get(
         "device_ban"
     )
 
     if device_ban is not None:
-        if not isinstance(device_ban, dict):
-            return False, "Invalid device_ban", claims
+        if not isinstance(
+            device_ban,
+            dict
+        ):
+            return (
+                False,
+                "Invalid device_ban",
+                claims
+            )
 
         is_banned = device_ban.get(
             "is_banned",
             False
         )
 
-        remaining_ban_time = device_ban.get(
-            "remaining_ban_time",
-            0
+        remaining_ban_time = (
+            device_ban.get(
+                "remaining_ban_time",
+                0
+            )
         )
 
         if is_banned is True:
             game_log(
                 "Banned Device",
-                f"**Unique ID:** `{unique_id}`\n"
-                f"**Remaining Ban Time:** "
-                f"`{remaining_ban_time}`"
+                (
+                    f"**Unique ID:** `{unique_id}`\n"
+                    f"**Remaining Ban Time:** "
+                    f"`{remaining_ban_time}`"
+                )
             )
 
-            return False, "Device is banned", claims
+            return (
+                False,
+                "Device is banned",
+                claims
+            )
 
-    return True, "Attestation verified", claims
+    return (
+        True,
+        "Attestation verified",
+        claims
+    )
 
 
 def playfab_request(
@@ -397,8 +669,8 @@ def playfab_request(
     payload
 ):
     url = (
-        f"https://{settings.TitleId}.playfabapi.com/"
-        f"{endpoint}"
+        f"https://{settings.TitleId}"
+        f".playfabapi.com/{endpoint}"
     )
 
     try:
@@ -439,12 +711,21 @@ def meta_device_ban_request(
 
     if not access_token:
         return {
-            "error": "Meta access token is not configured"
+            "error": (
+                "Meta access token "
+                "is not configured"
+            )
         }, 500
 
-    if unique_id is None and ban_id is None:
+    if (
+        unique_id is None
+        and ban_id is None
+    ):
         return {
-            "error": "unique_id or ban_id is required"
+            "error": (
+                "unique_id or ban_id "
+                "is required"
+            )
         }, 400
 
     try:
@@ -453,7 +734,10 @@ def meta_device_ban_request(
         )
     except (TypeError, ValueError):
         return {
-            "error": "remaining_time_in_minute must be an integer"
+            "error": (
+                "remaining_time_in_minute "
+                "must be an integer"
+            )
         }, 400
 
     if (
@@ -462,8 +746,8 @@ def meta_device_ban_request(
     ):
         return {
             "error": (
-                "remaining_time_in_minute must be "
-                "between 0 and 52560000"
+                "remaining_time_in_minute "
+                "must be between 0 and 52560000"
             )
         }, 400
 
@@ -490,13 +774,15 @@ def meta_device_ban_request(
             params=params,
             timeout=15
         )
-    except requests.RequestException as e:
+    except requests.RequestException:
         logger.exception(
             "Meta device ban request failed"
         )
 
         return {
-            "error": "Meta device ban request failed"
+            "error": (
+                "Meta device ban request failed"
+            )
         }, 500
 
     try:
@@ -512,7 +798,9 @@ def meta_device_ban_request(
 @app.before_request
 def api_request_start():
     if request.path.startswith("/api/"):
-        request.api_start_time = time.perf_counter()
+        request.api_start_time = (
+            time.perf_counter()
+        )
 
 
 @app.after_request
@@ -560,13 +848,15 @@ def api_request_log(response):
 
     game_log(
         "API Request",
-        f"**Endpoint:** `{request.path}`\n"
-        f"**Method:** `{request.method}`\n"
-        f"**IP:** `{ip}`\n"
-        f"**Status:** `{response.status_code}`\n"
-        f"**PlayFab ID:** `{playfab_id}`\n"
-        f"**Username:** `{username}`\n"
-        f"**Request Time:** `{elapsed_ms:.2f} ms`"
+        (
+            f"**Endpoint:** `{request.path}`\n"
+            f"**Method:** `{request.method}`\n"
+            f"**IP:** `{ip}`\n"
+            f"**Status:** `{response.status_code}`\n"
+            f"**PlayFab ID:** `{playfab_id}`\n"
+            f"**Username:** `{username}`\n"
+            f"**Request Time:** `{elapsed_ms:.2f} ms`"
+        )
     )
 
     return response
@@ -627,12 +917,26 @@ def cache_playfab_id():
     methods=["GET", "POST"]
 )
 def attestation_challenge():
-    nonce = generate_challenge_nonce()
+    try:
+        nonce = create_attestation_nonce()
 
-    return jsonify({
-        "success": True,
-        "challenge_nonce": nonce
-    })
+        return jsonify({
+            "success": True,
+            "challenge_nonce": nonce
+        })
+
+    except Exception:
+        logger.exception(
+            "Failed to create attestation nonce"
+        )
+
+        return jsonify({
+            "success": False,
+            "error": (
+                "Failed to create "
+                "attestation challenge"
+            )
+        }), 500
 
 
 @app.route(
@@ -667,14 +971,18 @@ def attestation_verify():
         return jsonify({
             "success": False,
             "verified": False,
-            "error": "Missing attestation token"
+            "error": (
+                "Missing attestation token"
+            )
         }), 400
 
     if not challenge_nonce:
         return jsonify({
             "success": False,
             "verified": False,
-            "error": "Missing challenge nonce"
+            "error": (
+                "Missing challenge nonce"
+            )
         }), 400
 
     verified, message, claims = (
@@ -695,6 +1003,26 @@ def attestation_verify():
             "verified": False,
             "error": message
         }), 401
+
+    if not consume_attestation_nonce(
+        challenge_nonce
+    ):
+        game_log(
+            "Attestation Replay Blocked",
+            (
+                "**Reason:** `Nonce already "
+                "used or expired`"
+            )
+        )
+
+        return jsonify({
+            "success": False,
+            "verified": False,
+            "error": (
+                "Challenge nonce has already "
+                "been used or expired"
+            )
+        }), 403
 
     device_state = claims.get(
         "device_state",
@@ -781,13 +1109,17 @@ def playfab_authentication():
     if not attestation_token:
         return jsonify({
             "success": False,
-            "error": "Missing attestation token"
+            "error": (
+                "Missing attestation token"
+            )
         }), 400
 
     if not challenge_nonce:
         return jsonify({
             "success": False,
-            "error": "Missing challenge nonce"
+            "error": (
+                "Missing challenge nonce"
+            )
         }), 400
 
     verified, message, claims = (
@@ -800,14 +1132,36 @@ def playfab_authentication():
     if not verified:
         game_log(
             "PlayFab Authentication Failed",
-            f"**Oculus ID:** `{oculus_id}`\n"
-            f"**Reason:** `{message}`"
+            (
+                f"**Oculus ID:** `{oculus_id}`\n"
+                f"**Reason:** `{message}`"
+            )
         )
 
         return jsonify({
             "success": False,
             "error": message
         }), 401
+
+    if not consume_attestation_nonce(
+        challenge_nonce
+    ):
+        game_log(
+            "Attestation Replay Blocked",
+            (
+                f"**Oculus ID:** `{oculus_id}`\n"
+                f"**Reason:** `Nonce already "
+                f"used or expired`"
+            )
+        )
+
+        return jsonify({
+            "success": False,
+            "error": (
+                "Challenge nonce has already "
+                "been used or expired"
+            )
+        }), 403
 
     device_state = claims.get(
         "device_state",
@@ -831,17 +1185,21 @@ def playfab_authentication():
     if status_code >= 400:
         game_log(
             "PlayFab Login Failed",
-            f"**Oculus ID:** `{oculus_id}`\n"
-            f"**Status:** `{status_code}`"
+            (
+                f"**Oculus ID:** `{oculus_id}`\n"
+                f"**Status:** `{status_code}`"
+            )
         )
 
         return jsonify(result), status_code
 
     game_log(
         "PlayFab Login",
-        f"**Oculus ID:** `{oculus_id}`\n"
-        f"**Device Integrity:** "
-        f"`{device_state.get('device_integrity_state')}`"
+        (
+            f"**Oculus ID:** `{oculus_id}`\n"
+            f"**Device Integrity:** "
+            f"`{device_state.get('device_integrity_state')}`"
+        )
     )
 
     return jsonify(result), status_code
@@ -885,10 +1243,15 @@ def device_ban():
             "error": "Missing is_banned"
         }), 400
 
-    if unique_id is None and ban_id is None:
+    if (
+        unique_id is None
+        and ban_id is None
+    ):
         return jsonify({
             "success": False,
-            "error": "Missing unique_id or ban_id"
+            "error": (
+                "Missing unique_id or ban_id"
+            )
         }), 400
 
     result, status_code = (
@@ -903,10 +1266,12 @@ def device_ban():
     if status_code < 400:
         game_log(
             "Meta Device Ban Updated",
-            f"**Ban ID:** `{ban_id or 'new'}`\n"
-            f"**Unique ID:** `{unique_id or 'N/A'}`\n"
-            f"**Banned:** `{bool(is_banned)}`\n"
-            f"**Minutes:** `{remaining_time}`"
+            (
+                f"**Ban ID:** `{ban_id or 'new'}`\n"
+                f"**Unique ID:** `{unique_id or 'N/A'}`\n"
+                f"**Banned:** `{bool(is_banned)}`\n"
+                f"**Minutes:** `{remaining_time}`"
+            )
         )
 
     return jsonify(result), status_code
@@ -922,7 +1287,10 @@ def device_ban_ids():
     if not access_token:
         return jsonify({
             "success": False,
-            "error": "Meta access token is not configured"
+            "error": (
+                "Meta access token "
+                "is not configured"
+            )
         }), 500
 
     try:
@@ -978,7 +1346,10 @@ def device_ban_status():
     if not access_token:
         return jsonify({
             "success": False,
-            "error": "Meta access token is not configured"
+            "error": (
+                "Meta access token "
+                "is not configured"
+            )
         }), 500
 
     try:
@@ -1284,9 +1655,11 @@ def report_player():
 
     game_log(
         "Player Report",
-        f"```json\n"
-        f"{json.dumps(data, indent=2)[:3500]}"
-        f"\n```"
+        (
+            "```json\n"
+            f"{json.dumps(data, indent=2)[:3500]}"
+            "\n```"
+        )
     )
 
     return jsonify({
