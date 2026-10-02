@@ -25,6 +25,21 @@ ATTESTATION_WEBHOOK_URL = os.environ.get(
     ""
 )
 
+class GameInfo:
+    def __init__(self):
+        self.TitleId: str = "C7E30"  # PlayFab Title Id
+        self.SecretKey: str = "PEKS8YH8HTOAYATD93F4MS4N4BXNKOBRY4PJMYPWCYOOYE7I78"  # PlayFab Secret Key
+        self.ApiKey: str = "OC|1368813259653754|673098554f8a983dc591cf6114427955"  # App Api Key (Oculus/Graph API)
+
+    def get_auth_headers(self):
+        return {
+            "content-type": "application/json",
+            "X-SecretKey": self.SecretKey
+        }
+
+
+game = GameInfo()
+
 START_TIME = time.time()
 NONCES = {}
 CACHED_PLAYFAB_IDS = {}
