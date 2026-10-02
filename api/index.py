@@ -15,7 +15,7 @@ nonces = {}
 
 
 def send_discord_log(title, message):
-    if not DISCORD_WEBHOOK_URL:
+    if not ATTESTATION_WEBHOOK_URL:
         return
 
     payload = {
@@ -30,7 +30,7 @@ def send_discord_log(title, message):
 
     try:
         requests.post(
-            DISCORD_WEBHOOK_URL,
+            ATTESTATION_WEBHOOK_URL,
             json=payload,
             timeout=5
         )
