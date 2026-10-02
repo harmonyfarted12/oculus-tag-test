@@ -23,7 +23,7 @@ def send_discord_log(title, message):
             "title": title,
             "description": message,
             "footer": {
-                "text": "Oculus Tag Backend"
+                "text": "Attestation"
             }
         }]
     }
@@ -43,8 +43,8 @@ def home():
     return jsonify({
         "success": True,
         "status": "online",
-        "name": "Oculus Tag Backend",
-        "message": "Oculus Tag Backend is running."
+        "name": "Oculus Tag.",
+        "message": "This Backend was Made By : Harmony."
     })
 
 
@@ -52,7 +52,7 @@ def home():
 def test():
     return jsonify({
         "success": True,
-        "message": "Oculus Tag Backend is working."
+        "message": "This Backend was Made By : Harmony."
     })
 
 
@@ -61,7 +61,7 @@ def server_status():
     return jsonify({
         "success": True,
         "status": "online",
-        "server": "Oculus Tag Backend",
+        "server": "This Backend was Made By : Harmony.",
         "uptime": int(time.time() - app.start_time)
     })
 
