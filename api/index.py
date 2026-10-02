@@ -568,6 +568,14 @@ def attestation_verify():
         "challenge_nonce"
     )
 
+    oculus_id = (
+        data.get("OculusId")
+        or data.get("oculus_id")
+        or data.get("userid")
+        or data.get("UserId")
+        or data.get("UserID")
+    )
+
     if not token:
         return jsonify({
             "success": False,
@@ -581,6 +589,15 @@ def attestation_verify():
             "verified": False,
             "error": "Missing challenge_nonce"
         }), 400
+
+    if not oculus_id:
+        return jsonify({
+            "success": False,
+            "verified": False,
+            "error": "Missing OculusId"
+        }), 400
+
+    oculus_id = str(oculus_id)
 
     nonce_data = NONCES.get(
         challenge_nonce
@@ -616,36 +633,36 @@ def attestation_verify():
             "error": "Challenge nonce expired"
         }), 401
 
-    userid = str(
+    # Make sure the Oculus ID used when requesting
+    # the challenge is the same Oculus ID being verified.
+    challenge_userid = str(
         nonce_data.get(
             "userid",
-            data.get(
-                "userid",
-                data.get(
-                    "UserId",
-                    data.get(
-                        "OculusId",
-                        "Unknown"
-                    )
-                )
-            )
+            "Unknown"
         )
     )
 
-    if userid == "Unknown":
-        supplied_userid = (
-            data.get("OculusId")
-            or data.get("userid")
-            or data.get("UserId")
+    if (
+        challenge_userid
+        and challenge_userid != "Unknown"
+        and challenge_userid != oculus_id
+    ):
+        game_log(
+            "Attestation Rejected",
+            f"Challenge Oculus ID: `{challenge_userid}`\n"
+            f"Verification Oculus ID: `{oculus_id}`"
         )
 
-        if supplied_userid:
-            userid = str(supplied_userid)
+        return jsonify({
+            "success": False,
+            "verified": False,
+            "error": "Oculus ID does not match challenge"
+        }), 401
 
     attestation_log(
         "ATTESTATION VERIFY",
         {
-            "userid": userid,
+            "oculus id": oculus_id,
             "nonce": challenge_nonce,
             "attestation token": mask_secret(token)
         }
@@ -990,18 +1007,18 @@ def attestation_verify():
                     "error": "Device is banned"
                 }), 403
 
-        # Mark this Oculus ID as successfully verified.
-        #
-        # This is the important part that connects
-        # Meta attestation to PlayFab authentication.
-        mark_user_verified(userid)
+        # Only mark the exact Oculus ID supplied to this
+        # verification request as verified.
+        mark_user_verified(
+            oculus_id
+        )
 
         nonce_data["used"] = True
 
         attestation_log(
             "ATTESTATION VERIFIED",
             {
-                "userid": userid,
+                "oculus id": oculus_id,
                 "package": package_id,
                 "app integrity": app_integrity_state,
                 "device integrity": device_integrity_state
@@ -1011,6 +1028,7 @@ def attestation_verify():
         return jsonify({
             "success": True,
             "verified": True,
+            "OculusId": oculus_id,
             "package_id": package_id,
             "app_integrity_state": app_integrity_state,
             "device_integrity_state": device_integrity_state
