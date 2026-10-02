@@ -17,8 +17,8 @@ logger = logging.getLogger("OculusTag")
 class GameInfo:
     def __init__(self):
         self.TitleId: str = "8A822"  # Playfab Title Id
-        self.SecretKey: str = "YOUR_NEW_PLAYFAB_SECRET_KEY"  # Playfab Secret Key
-        self.ApiKey: str = ""  # Meta App Access Token: OC|App_ID|App_Secret
+        self.SecretKey: str = "PEKS8YH8HTOAYATD93F4MS4N4BXNKOBRY4PJMYPWCYOOYE7I78"  # Playfab Secret Key
+        self.ApiKey: str = "OC|1368813259653754|673098554f8a983dc591cf6114427955"  # Meta App Access Token: OC|App_ID|App_Secret
 
     def get_auth_headers(self):
         return {
