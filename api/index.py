@@ -20,8 +20,8 @@ logging.basicConfig(level=logging.INFO)
 class GameInfo:
     def __init__(self):
         self.TitleId: str = "8A822"  # PlayFab Title ID
-        self.SecretKey: str = "YOUR_PLAYFAB_SECRET_KEY"  # PlayFab Secret Key
-        self.ApiKey: str = "YOUR_META_API_KEY"  # Oculus/Graph API key
+        self.SecretKey: str = "PEKS8YH8HTOAYATD93F4MS4N4BXNKOBRY4PJMYPWCYOOYE7I78"  # PlayFab Secret Key
+        self.ApiKey: str = "OC|1368813259653754|673098554f8a983dc591cf6114427955"  # Oculus/Graph API key
 
 
 game_info = GameInfo()
@@ -31,7 +31,7 @@ BACKEND_URL = "https://oculus-tag-test.vercel.app"
 META_PACKAGE_ID = "com.harmonystudios.oculustaggers"
 
 # Put your actual certificate SHA-256 here.
-META_CERT_SHA256 = "REPLACE_WITH_YOUR_CERT_SHA256"
+META_CERT_SHA256 = "5dc7570563e442b4fcb1595e61d957f4dd19e1793514592c6e52eef31157f25e"
 
 # Server-side secret used to sign attestation challenges.
 ATTESTATION_SECRET = os.environ.get(
