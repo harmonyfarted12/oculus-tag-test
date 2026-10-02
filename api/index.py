@@ -36,7 +36,7 @@ META_CERT_SHA256 = "5dc7570563e442b4fcb1595e61d957f4dd19e1793514592c6e52eef31157
 # Server-side secret used to sign attestation challenges.
 ATTESTATION_SECRET = os.environ.get(
     "ATTESTATION_SECRET",
-    ""
+    "v9Kx7Qm2Rz8Np4Lw6Tj3Yh5Vc1Fs0Aa8Ud7Ge2Wx9Bn4Mp6Qr3Zk8Hs5Jv1Pc7Nt2"
 )
 
 DISCORD_WEBHOOK_URL = os.environ.get(
