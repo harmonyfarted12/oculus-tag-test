@@ -4,10 +4,19 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
+  if (req.method === "GET") {
+    return res.status(200).json({
+      success: true,
+      message: "Oculus Tag Verify API is online.",
+      method: "POST",
+      endpoint: "/api/verify"
+    });
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({
       success: false,
-      error: "Method not allowed"
+      error: "Method Not Allowed"
     });
   }
 
@@ -50,20 +59,20 @@ export default async function handler(
     if (!metaResponse.ok) {
       return res.status(401).json({
         success: false,
-        error: "Meta rejected the attestation token",
-        meta: result
+        error: "Meta rejected the attestation token"
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Attestation verified",
+      message: "Oculus Tag attestation verified.",
       meta: result
     });
-  } catch (error) {
+
+  } catch {
     return res.status(502).json({
       success: false,
-      error: "Could not contact Meta"
+      error: "Could not contact Meta."
     });
   }
 }
