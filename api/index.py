@@ -22,8 +22,6 @@ class GameInfo:
         self.TitleId: str = "C7E30"
         self.SecretKey: str = "PEKS8YH8HTOAYATD93F4MS4N4BXNKOBRY4PJMYPWCYOOYE7I78"
         self.ApiKey: str = "OC|1368813259653754|673098554f8a983dc591cf6114427955"
-        META_PACKAGE_ID = "com.pootag.pootag"
-        META_CERT_SHA256 = "a40da80a59d170caa950cf15c18c454d47a39b26989d8b640ecd745ba71bf5dc"
 
     def get_auth_headers(self):
         return {
@@ -35,17 +33,44 @@ class GameInfo:
 game = GameInfo()
 
 
-META_PACKAGE_ID = os.environ.get("META_PACKAGE_ID", "")
-META_CERT_SHA256 = os.environ.get("META_CERT_SHA256", "")
+# Meta application information
+# Put your real values here manually.
+META_PACKAGE_ID = "com.harmonystudios.oculustaggers"
+META_CERT_SHA256 = "5dc7570563e442b4fcb1595e61d957f4dd19e1793514592c6e52eef31157f25e"
+
+
+# Discord webhook can remain an environment variable.
 ATTESTATION_WEBHOOK_URL = os.environ.get(
     "ATTESTATION_WEBHOOK_URL",
     ""
 )
 
+
 START_TIME = time.time()
 
+# Temporary in-memory challenge storage.
 NONCES = {}
+
+# Temporary PlayFab ID cache.
 CACHED_PLAYFAB_IDS = {}
+
+# Users that have successfully passed Meta attestation.
+#
+# {
+#     "oculus_id": {
+#         "verified": True,
+#         "verified_at": 1234567890
+#     }
+# }
+#
+# NOTE:
+# Vercel serverless instances are not guaranteed to share
+# this dictionary. A persistent database/KV store is recommended
+# for production.
+VERIFIED_USERS = {}
+
+
+ATTESTATION_EXPIRATION = 600
 
 
 REDEEMABLE_ITEMS = [
@@ -243,11 +268,70 @@ def cleanup_nonces():
     expired = []
 
     for nonce, data in list(NONCES.items()):
-        if now - data["created"] > 600:
+        if now - data["created"] > ATTESTATION_EXPIRATION:
             expired.append(nonce)
 
     for nonce in expired:
         NONCES.pop(nonce, None)
+
+
+def cleanup_verified_users():
+    now = time.time()
+
+    expired = []
+
+    for userid, data in list(VERIFIED_USERS.items()):
+        verified_at = data.get("verified_at", 0)
+
+        if now - verified_at > ATTESTATION_EXPIRATION:
+            expired.append(userid)
+
+    for userid in expired:
+        VERIFIED_USERS.pop(userid, None)
+
+
+def mark_user_verified(userid):
+    if not userid:
+        return
+
+    userid = str(userid)
+
+    VERIFIED_USERS[userid] = {
+        "verified": True,
+        "verified_at": time.time()
+    }
+
+
+def is_user_verified(userid):
+    if not userid:
+        return False
+
+    cleanup_verified_users()
+
+    userid = str(userid)
+
+    verification = VERIFIED_USERS.get(userid)
+
+    if not verification:
+        return False
+
+    if verification.get("verified") is not True:
+        return False
+
+    verified_at = verification.get(
+        "verified_at",
+        0
+    )
+
+    if time.time() - verified_at > ATTESTATION_EXPIRATION:
+        VERIFIED_USERS.pop(
+            userid,
+            None
+        )
+
+        return False
+
+    return True
 
 
 def decode_base64url_json(value):
@@ -454,20 +538,9 @@ def attestation_challenge():
 
     nonce = generate_nonce(userid)
 
-    attestation_log(
-        "1. ATTESTATION BEGIN",
-        {
-            "userid": str(userid)
-        }
-    )
-
-    attestation_log(
-        "2. SUCCESS BEGIN BIRD",
-        {
-            "userid": str(userid),
-            "challenge nonce": nonce
-        }
-    )
+    # Deliberately no Discord logging here.
+    # Simply requesting a challenge does not mean
+    # that the user has successfully authenticated.
 
     return jsonify({
         "success": True,
@@ -487,8 +560,13 @@ def attestation_verify():
     if not isinstance(data, dict):
         data = {}
 
-    token = data.get("attestation_token")
-    challenge_nonce = data.get("challenge_nonce")
+    token = data.get(
+        "attestation_token"
+    )
+
+    challenge_nonce = data.get(
+        "challenge_nonce"
+    )
 
     if not token:
         return jsonify({
@@ -522,7 +600,11 @@ def attestation_verify():
             "error": "Challenge nonce already used"
         }), 401
 
-    if time.time() - nonce_data["created"] > 600:
+    if (
+        time.time()
+        - nonce_data["created"]
+        > ATTESTATION_EXPIRATION
+    ):
         NONCES.pop(
             challenge_nonce,
             None
@@ -534,27 +616,37 @@ def attestation_verify():
             "error": "Challenge nonce expired"
         }), 401
 
-    userid = nonce_data.get(
-        "userid",
-        data.get(
+    userid = str(
+        nonce_data.get(
             "userid",
             data.get(
-                "UserId",
+                "userid",
                 data.get(
-                    "OculusId",
-                    "Unknown"
+                    "UserId",
+                    data.get(
+                        "OculusId",
+                        "Unknown"
+                    )
                 )
             )
         )
     )
 
+    if userid == "Unknown":
+        supplied_userid = (
+            data.get("OculusId")
+            or data.get("userid")
+            or data.get("UserId")
+        )
+
+        if supplied_userid:
+            userid = str(supplied_userid)
+
     attestation_log(
-        "3. ATTESTATION COMPLETE",
+        "ATTESTATION VERIFY",
         {
-            "userid": str(userid),
-            "meta nonce": {
-                "nonce": challenge_nonce
-            },
+            "userid": userid,
+            "nonce": challenge_nonce,
             "attestation token": mask_secret(token)
         }
     )
@@ -609,7 +701,9 @@ def attestation_verify():
                 "error": "Meta rejected the attestation token"
             }), 401
 
-        meta_data = result.get("data")
+        meta_data = result.get(
+            "data"
+        )
 
         if not isinstance(meta_data, list):
             return jsonify({
@@ -685,21 +779,30 @@ def attestation_verify():
             "device_state"
         )
 
-        if not isinstance(request_details, dict):
+        if not isinstance(
+            request_details,
+            dict
+        ):
             return jsonify({
                 "success": False,
                 "verified": False,
                 "error": "Missing request details"
             }), 401
 
-        if not isinstance(app_state, dict):
+        if not isinstance(
+            app_state,
+            dict
+        ):
             return jsonify({
                 "success": False,
                 "verified": False,
                 "error": "Missing app state"
             }), 401
 
-        if not isinstance(device_state, dict):
+        if not isinstance(
+            device_state,
+            dict
+        ):
             return jsonify({
                 "success": False,
                 "verified": False,
@@ -721,7 +824,7 @@ def attestation_verify():
         if token_nonce != challenge_nonce:
             game_log(
                 "Attestation Rejected",
-                "The attestation nonce did not match the server challenge."
+                "The attestation nonce did not match."
             )
 
             return jsonify({
@@ -791,35 +894,11 @@ def attestation_verify():
             "device_integrity_state"
         )
 
-        custom_id = (
-            data.get("custom_id")
-            or data.get("CustomId")
-            or data.get("customId")
-            or "Unknown"
-        )
-
-        meta_user = (
-            data.get("meta_user")
-            or data.get("MetaUser")
-            or data.get("metaUser")
-            or "Unknown"
-        )
-
-        attestation_log(
-            "4. ATTESTATION INFORMATION",
-            {
-                "meta id": str(userid),
-                "custom id": str(custom_id),
-                "meta user": str(meta_user),
-                "nonce": challenge_nonce
-            }
-        )
-
         if META_PACKAGE_ID:
             if package_id != META_PACKAGE_ID:
                 game_log(
                     "Attestation Rejected",
-                    "The attestation package ID did not match."
+                    f"Invalid package ID: `{package_id}`"
                 )
 
                 return jsonify({
@@ -835,13 +914,18 @@ def attestation_verify():
                 .lower()
             )
 
-            if isinstance(certificate_digests, str):
+            if isinstance(
+                certificate_digests,
+                str
+            ):
                 certificate_digests = [
                     certificate_digests
                 ]
 
             normalized_certificates = [
-                str(cert).strip().lower()
+                str(cert)
+                .strip()
+                .lower()
                 for cert in certificate_digests
             ]
 
@@ -860,7 +944,7 @@ def attestation_verify():
         if app_integrity_state != "StoreRecognized":
             game_log(
                 "Attestation Rejected",
-                "The application is not StoreRecognized."
+                f"App integrity: `{app_integrity_state}`"
             )
 
             return jsonify({
@@ -875,7 +959,7 @@ def attestation_verify():
         ):
             game_log(
                 "Attestation Rejected",
-                "The device failed the integrity check."
+                f"Device integrity: `{device_integrity_state}`"
             )
 
             return jsonify({
@@ -888,8 +972,13 @@ def attestation_verify():
             "device_ban"
         )
 
-        if isinstance(device_ban, dict):
-            if device_ban.get("is_banned") is True:
+        if isinstance(
+            device_ban,
+            dict
+        ):
+            if device_ban.get(
+                "is_banned"
+            ) is True:
                 game_log(
                     "Attestation Rejected",
                     "The attested device is banned."
@@ -901,36 +990,22 @@ def attestation_verify():
                     "error": "Device is banned"
                 }), 403
 
-        attestation_log(
-            "5. DEVICE INFO COMPLETED",
-            {
-                "message": "App and device integrity checks passed.",
-                "claims": claims,
-                "Mothership Id": str(
-                    data.get(
-                        "mothership_id",
-                        data.get(
-                            "MothershipId",
-                            "Unknown"
-                        )
-                    )
-                ),
-                "accounts": data.get(
-                    "accounts",
-                    1
-                ),
-                "attestation token": mask_secret(token)
-            }
-        )
+        # Mark this Oculus ID as successfully verified.
+        #
+        # This is the important part that connects
+        # Meta attestation to PlayFab authentication.
+        mark_user_verified(userid)
 
         nonce_data["used"] = True
 
-        game_log(
-            "Attestation Verified",
-            f"**User ID:** `{userid}`\n"
-            f"**Package:** `{package_id}`\n"
-            f"**App Integrity:** `{app_integrity_state}`\n"
-            f"**Device Integrity:** `{device_integrity_state}`"
+        attestation_log(
+            "ATTESTATION VERIFIED",
+            {
+                "userid": userid,
+                "package": package_id,
+                "app integrity": app_integrity_state,
+                "device integrity": device_integrity_state
+            }
         )
 
         return jsonify({
@@ -1006,6 +1081,27 @@ def playfab_authentication():
         data["OculusId"]
     )
 
+    # ---------------------------------------------------------
+    # REQUIRED META ATTESTATION
+    # ---------------------------------------------------------
+    #
+    # PlayFab authentication is blocked unless this Oculus ID
+    # has successfully passed Meta attestation first.
+    #
+    if not is_user_verified(oculus_id):
+        game_log(
+            "PlayFab Authentication Rejected",
+            f"Oculus ID `{oculus_id}` has not passed Meta attestation."
+        )
+
+        return jsonify({
+            "Error": "AttestationRequired",
+            "Message": (
+                "Successful Meta attestation is required "
+                "before PlayFab authentication."
+            )
+        }), 403
+
     login_payload = {
         "ServerCustomId": "OCULUS" + oculus_id,
         "CreateAccount": True
@@ -1069,7 +1165,9 @@ def playfab_authentication():
 
     CACHED_PLAYFAB_IDS[oculus_id] = {
         "PlayFabId": playfab_id,
-        "Username": data.get("Username"),
+        "Username": data.get(
+            "Username"
+        ),
         "cached": time.time()
     }
 
@@ -1082,15 +1180,23 @@ def playfab_authentication():
     )
 
     attestation_log(
-        "6. SUCCESS AUTH",
+        "PLAYFAB AUTH SUCCESS",
         {
-            "orgscoped id": str(orgscoped_id),
-            "oculus id": str(oculus_id),
+            "orgscoped id": str(
+                orgscoped_id
+            ),
+            "oculus id": str(
+                oculus_id
+            ),
             "playfab id": str(
                 playfab_id or "Unknown"
             ),
-            "entity token": mask_secret(entity_token),
-            "session ticket": mask_secret(session_ticket),
+            "entity token": mask_secret(
+                entity_token
+            ),
+            "session ticket": mask_secret(
+                session_ticket
+            ),
             "platform": data.get(
                 "Platform",
                 "Quest"
