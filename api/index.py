@@ -24,12 +24,12 @@ class GameInfo:
 
         # Put these in Vercel Environment Variables.
         self.SecretKey = os.environ.get(
-            "PLAYFAB_SECRET_KEY",
+            "PEKS8YH8HTOAYATD93F4MS4N4BXNKOBRY4PJMYPWCYOOYE7I78",
             ""
         )
 
         self.ApiKey = os.environ.get(
-            "META_API_KEY",
+            "OC|1368813259653754|673098554f8a983dc591cf6114427955",
             ""
         )
 
