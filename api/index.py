@@ -910,7 +910,53 @@ def cache_playfab_id():
 )
 def attestation_challenge():
     try:
+        data = request.get_json(
+            silent=True
+        ) or {}
+
+        if not isinstance(data, dict):
+            data = {}
+
+        oculus_id = (
+            data.get("OculusId")
+            or data.get("userid")
+            or data.get("UserId")
+            or data.get("UserID")
+            or "Unknown"
+        )
+
         nonce = create_attestation_nonce()
+
+        # EMBED 1
+        send_attestation_embed(
+            "attestation begin or sum",
+            [
+                {
+                    "name": "userid",
+                    "value": f"```{oculus_id}```",
+                    "inline": False
+                }
+            ],
+            0x5865F2
+        )
+
+        # EMBED 2
+        send_attestation_embed(
+            "success begin bird.",
+            [
+                {
+                    "name": "userid",
+                    "value": f"```{oculus_id}```",
+                    "inline": False
+                },
+                {
+                    "name": "challenge nonce",
+                    "value": f"```{nonce}```",
+                    "inline": False
+                }
+            ],
+            0x57F287
+        )
 
         return jsonify({
             "success": True,
@@ -981,6 +1027,8 @@ def attestation_verify():
         verify_meta_attestation(
             attestation_token,
             challenge_nonce
+
+            
         )
     )
 
