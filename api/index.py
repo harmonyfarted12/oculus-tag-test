@@ -22,11 +22,6 @@ START_TIME = time.time()
 NONCES = {}
 CACHED_PLAYFAB_IDS = {}
 
-CODES_GITHUB_URL = os.environ.get(
-    "CODES_GITHUB_URL",
-    "https://github.com/redapplegtag/backendsfrr/raw/main/codes.txt"
-)
-
 REDEEMABLE_ITEMS = [
     "cosmetic1",
     "cosmetic2",
@@ -78,7 +73,10 @@ def game_log(title, message):
             timeout=5
         )
     except Exception as e:
-        logger.warning("Discord logging failed: %s", e)
+        logger.warning(
+            "Discord logging failed: %s",
+            e
+        )
 
 
 def playfab_headers():
@@ -114,7 +112,10 @@ def playfab_request(endpoint, payload):
         return response, data
 
     except requests.RequestException as e:
-        logger.error("PlayFab request failed: %s", e)
+        logger.error(
+            "PlayFab request failed: %s",
+            e
+        )
 
         return None, {
             "errorMessage": "Unable to contact PlayFab."
@@ -173,6 +174,75 @@ def cleanup_nonces():
         NONCES.pop(nonce, None)
 
 
+@app.before_request
+def api_request_start():
+    if request.path.startswith("/api/"):
+        request.api_start_time = time.perf_counter()
+
+
+@app.after_request
+def api_request_log(response):
+    if not request.path.startswith("/api/"):
+        return response
+
+    start_time = getattr(
+        request,
+        "api_start_time",
+        time.perf_counter()
+    )
+
+    elapsed_ms = (
+        time.perf_counter() - start_time
+    ) * 1000
+
+    ip = request.headers.get(
+        "X-Forwarded-For",
+        request.remote_addr or "Unknown"
+    ).split(",")[0].strip()
+
+    data = request.get_json(silent=True) or {}
+
+    playfab_id = (
+        data.get("PlayFabId")
+        or data.get("playfabId")
+        or data.get("UserId")
+        or data.get("UserID")
+        or "Unknown"
+    )
+
+    username = (
+        data.get("Username")
+        or data.get("username")
+        or data.get("DisplayName")
+        or data.get("Name")
+        or "Unknown"
+    )
+
+    if playfab_id == "Unknown":
+        cached = CACHED_PLAYFAB_IDS.get(
+            str(data.get("OculusId", ""))
+        )
+
+        if cached:
+            playfab_id = cached.get(
+                "PlayFabId",
+                "Unknown"
+            )
+
+    game_log(
+        "API Request",
+        f"**Endpoint:** `{request.path}`\n"
+        f"**Method:** `{request.method}`\n"
+        f"**IP:** `{ip}`\n"
+        f"**Status:** `{response.status_code}`\n"
+        f"**PlayFab ID:** `{playfab_id}`\n"
+        f"**Username:** `{username}`\n"
+        f"**Request Time:** `{elapsed_ms:.2f} ms`"
+    )
+
+    return response
+
+
 @app.route("/", methods=["GET", "POST"])
 def home():
     return jsonify({
@@ -221,29 +291,44 @@ def cache_playfab_id():
     data = request.get_json(silent=True) or {}
 
     playfab_id = data.get("PlayFabId")
+    oculus_id = data.get("OculusId")
 
     if not playfab_id:
         return jsonify({
             "error": "Missing PlayFabId"
         }), 400
 
-    CACHED_PLAYFAB_IDS[str(playfab_id)] = {
-        "cached": time.time(),
-        "data": data
+    cache_key = str(
+        oculus_id
+        if oculus_id
+        else playfab_id
+    )
+
+    CACHED_PLAYFAB_IDS[cache_key] = {
+        "PlayFabId": playfab_id,
+        "Username": data.get(
+            "Username",
+            data.get("DisplayName")
+        ),
+        "cached": time.time()
     }
 
     game_log(
         "PlayFab ID Cached",
-        f"PlayFabId: `{playfab_id}`"
+        f"PlayFab ID: `{playfab_id}`\n"
+        f"Oculus ID: `{oculus_id or 'Unknown'}`"
     )
 
     return jsonify({
         "Message": "Success",
         "PlayFabId": playfab_id
-    }), 200
+    })
 
 
-@app.route("/api/attestation/challenge", methods=["GET", "POST"])
+@app.route(
+    "/api/attestation/challenge",
+    methods=["GET", "POST"]
+)
 def attestation_challenge():
     cleanup_nonces()
 
@@ -260,7 +345,10 @@ def attestation_challenge():
     })
 
 
-@app.route("/api/attestation/verify", methods=["POST"])
+@app.route(
+    "/api/attestation/verify",
+    methods=["POST"]
+)
 def attestation_verify():
     data = request.get_json(silent=True) or {}
 
@@ -348,7 +436,10 @@ def attestation_verify():
         }), 502
 
 
-@app.route("/api/PlayFabAuthentication", methods=["POST"])
+@app.route(
+    "/api/PlayFabAuthentication",
+    methods=["POST"]
+)
 def playfab_authentication():
     data = request.get_json(silent=True) or {}
 
@@ -359,11 +450,17 @@ def playfab_authentication():
         "OculusId"
     ]
 
-    missing = validate_input(data, required)
+    missing = validate_input(
+        data,
+        required
+    )
 
     if missing:
         return jsonify({
-            "Message": "Missing parameter(s): " + ", ".join(missing),
+            "Message": (
+                "Missing parameter(s): "
+                + ", ".join(missing)
+            ),
             "Error": "BadRequest-MissingParameter"
         }), 400
 
@@ -396,7 +493,8 @@ def playfab_authentication():
 
         game_log(
             "PlayFab Login Failed",
-            f"Authentication failed for Oculus user `{oculus_id}`."
+            f"Oculus ID: `{oculus_id}`\n"
+            f"Error: `{error_message}`"
         )
 
         return jsonify({
@@ -404,29 +502,46 @@ def playfab_authentication():
             "Message": error_message
         }), response.status_code
 
-    data_result = result.get("data", {})
+    data_result = result.get(
+        "data",
+        {}
+    )
 
-    playfab_id = data_result.get("PlayFabId")
-    session_ticket = data_result.get("SessionTicket")
+    playfab_id = data_result.get(
+        "PlayFabId"
+    )
+
+    session_ticket = data_result.get(
+        "SessionTicket"
+    )
 
     entity_token_data = data_result.get(
         "EntityToken",
         {}
     )
 
-    entity_token = entity_token_data.get("EntityToken")
-    entity = entity_token_data.get("Entity", {})
+    entity_token = entity_token_data.get(
+        "EntityToken"
+    )
+
+    entity = entity_token_data.get(
+        "Entity",
+        {}
+    )
 
     session_id = str(uuid.uuid4())
 
-    CACHED_PLAYFAB_IDS[str(oculus_id)] = {
+    CACHED_PLAYFAB_IDS[oculus_id] = {
         "PlayFabId": playfab_id,
+        "Username": data.get("Username"),
         "cached": time.time()
     }
 
     game_log(
         "Player Login",
-        f"Player `{playfab_id}` authenticated."
+        f"PlayFab ID: `{playfab_id}`\n"
+        f"Oculus ID: `{oculus_id}`\n"
+        f"Username: `{data.get('Username', 'Unknown')}`"
     )
 
     return jsonify({
@@ -439,7 +554,10 @@ def playfab_authentication():
     })
 
 
-@app.route("/api/TitleData", methods=["GET", "POST"])
+@app.route(
+    "/api/TitleData",
+    methods=["GET", "POST"]
+)
 def title_data():
     return jsonify({
         "MaxPlayersPerRoom": 8,
@@ -470,14 +588,23 @@ def title_data():
         "ServerVersion": "1.0.0",
         "ClientMinVersion": "1.0.0",
         "MOTD": (
-            "<color=#B000FF>WELCOME TO OCULUS TAG!</color>\n\n"
-            "<color=#FFFFFF>WELCOME TO THE GAME!</color>\n"
-            "<color=#A020F0>discord.gg/oculustagg</color>"
+            "<color=#B000FF>"
+            "WELCOME TO OCULUS TAG!"
+            "</color>\n\n"
+            "<color=#FFFFFF>"
+            "WELCOME TO THE GAME!"
+            "</color>\n"
+            "<color=#A020F0>"
+            "discord.gg/oculustagg"
+            "</color>"
         )
     })
 
 
-@app.route("/api/GetAcceptedAgreements", methods=["GET", "POST"])
+@app.route(
+    "/api/GetAcceptedAgreements",
+    methods=["GET", "POST"]
+)
 def get_accepted_agreements():
     return jsonify({
         "PrivacyPolicy": "1.1.28",
@@ -486,12 +613,18 @@ def get_accepted_agreements():
     })
 
 
-@app.route("/api/SubmitAcceptedAgreements", methods=["POST"])
+@app.route(
+    "/api/SubmitAcceptedAgreements",
+    methods=["POST"]
+)
 def submit_accepted_agreements():
     data = request.get_json(silent=True) or {}
 
     playfab_id = data.get("PlayFabId")
-    agreements = data.get("Agreements", {})
+    agreements = data.get(
+        "Agreements",
+        {}
+    )
 
     if not playfab_id:
         return jsonify({
@@ -500,7 +633,7 @@ def submit_accepted_agreements():
 
     game_log(
         "Agreements Submitted",
-        f"Player `{playfab_id}` submitted agreements."
+        f"PlayFab ID: `{playfab_id}`"
     )
 
     return jsonify({
@@ -509,7 +642,10 @@ def submit_accepted_agreements():
     })
 
 
-@app.route("/api/v2/GetName", methods=["GET", "POST"])
+@app.route(
+    "/api/v2/GetName",
+    methods=["GET", "POST"]
+)
 def get_name():
     adverbs = [
         "Cool",
@@ -544,11 +680,16 @@ def get_name():
     })
 
 
-@app.route("/api/GetInventory", methods=["POST"])
+@app.route(
+    "/api/GetInventory",
+    methods=["POST"]
+)
 def get_inventory():
     data = request.get_json(silent=True) or {}
 
-    playfab_id = data.get("PlayFabId")
+    playfab_id = data.get(
+        "PlayFabId"
+    )
 
     if not playfab_id:
         return jsonify({
@@ -562,7 +703,10 @@ def get_inventory():
     )
 
 
-@app.route("/api/GetLeaderboard", methods=["POST"])
+@app.route(
+    "/api/GetLeaderboard",
+    methods=["POST"]
+)
 def get_leaderboard():
     data = request.get_json(silent=True) or {}
 
@@ -580,7 +724,10 @@ def get_leaderboard():
     )
 
 
-@app.route("/api/UpdateStats", methods=["POST"])
+@app.route(
+    "/api/UpdateStats",
+    methods=["POST"]
+)
 def update_stats():
     data = request.get_json(silent=True) or {}
 
@@ -594,7 +741,10 @@ def update_stats():
 
     if missing:
         return jsonify({
-            "error": "Missing fields: " + ", ".join(missing)
+            "error": (
+                "Missing fields: "
+                + ", ".join(missing)
+            )
         }), 400
 
     return cloud_script(
@@ -604,7 +754,10 @@ def update_stats():
     )
 
 
-@app.route("/api/UpdateProfile", methods=["POST"])
+@app.route(
+    "/api/UpdateProfile",
+    methods=["POST"]
+)
 def update_profile():
     data = request.get_json(silent=True) or {}
 
@@ -618,7 +771,10 @@ def update_profile():
 
     if missing:
         return jsonify({
-            "error": "Missing fields: " + ", ".join(missing)
+            "error": (
+                "Missing fields: "
+                + ", ".join(missing)
+            )
         }), 400
 
     return cloud_script(
@@ -630,14 +786,20 @@ def update_profile():
     )
 
 
-@app.route("/api/GetCosmetics", methods=["GET", "POST"])
+@app.route(
+    "/api/GetCosmetics",
+    methods=["GET", "POST"]
+)
 def get_cosmetics():
     return jsonify({
         "cosmetics": REDEEMABLE_ITEMS
     })
 
 
-@app.route("/api/EquipCosmetic", methods=["POST"])
+@app.route(
+    "/api/EquipCosmetic",
+    methods=["POST"]
+)
 def equip_cosmetic():
     data = request.get_json(silent=True) or {}
 
@@ -651,10 +813,15 @@ def equip_cosmetic():
 
     if missing:
         return jsonify({
-            "error": "Missing fields: " + ", ".join(missing)
+            "error": (
+                "Missing fields: "
+                + ", ".join(missing)
+            )
         }), 400
 
-    if data["CosmeticId"] not in REDEEMABLE_ITEMS:
+    cosmetic_id = data["CosmeticId"]
+
+    if cosmetic_id not in REDEEMABLE_ITEMS:
         return jsonify({
             "success": False,
             "error": "Unknown cosmetic"
@@ -662,7 +829,8 @@ def equip_cosmetic():
 
     game_log(
         "Cosmetic Equipped",
-        f"Player `{data['PlayFabId']}` equipped `{data['CosmeticId']}`."
+        f"PlayFab ID: `{data['PlayFabId']}`\n"
+        f"Cosmetic: `{cosmetic_id}`"
     )
 
     return jsonify({
@@ -670,7 +838,10 @@ def equip_cosmetic():
     })
 
 
-@app.route("/api/ReportPlayer", methods=["POST"])
+@app.route(
+    "/api/ReportPlayer",
+    methods=["POST"]
+)
 def report_player():
     data = request.get_json(silent=True) or {}
 
@@ -685,7 +856,10 @@ def report_player():
 
     if missing:
         return jsonify({
-            "error": "Missing fields: " + ", ".join(missing)
+            "error": (
+                "Missing fields: "
+                + ", ".join(missing)
+            )
         }), 400
 
     game_log(
@@ -701,11 +875,18 @@ def report_player():
     })
 
 
-@app.route("/api/CreateParty", methods=["POST"])
+@app.route(
+    "/api/CreateParty",
+    methods=["POST"]
+)
 def create_party():
     data = request.get_json(silent=True) or {}
 
-    if not data.get("PlayFabId"):
+    playfab_id = data.get(
+        "PlayFabId"
+    )
+
+    if not playfab_id:
         return jsonify({
             "error": "Missing PlayFabId"
         }), 400
@@ -714,7 +895,8 @@ def create_party():
 
     game_log(
         "Party Created",
-        f"Player `{data['PlayFabId']}` created party `{party_id}`."
+        f"PlayFab ID: `{playfab_id}`\n"
+        f"Party ID: `{party_id}`"
     )
 
     return jsonify({
@@ -723,7 +905,10 @@ def create_party():
     })
 
 
-@app.route("/api/JoinParty", methods=["POST"])
+@app.route(
+    "/api/JoinParty",
+    methods=["POST"]
+)
 def join_party():
     data = request.get_json(silent=True) or {}
 
@@ -737,7 +922,10 @@ def join_party():
 
     if missing:
         return jsonify({
-            "error": "Missing fields: " + ", ".join(missing)
+            "error": (
+                "Missing fields: "
+                + ", ".join(missing)
+            )
         }), 400
 
     return jsonify({
@@ -746,7 +934,10 @@ def join_party():
     })
 
 
-@app.route("/api/LeaveParty", methods=["POST"])
+@app.route(
+    "/api/LeaveParty",
+    methods=["POST"]
+)
 def leave_party():
     data = request.get_json(silent=True) or {}
 
@@ -760,7 +951,10 @@ def leave_party():
 
     if missing:
         return jsonify({
-            "error": "Missing fields: " + ", ".join(missing)
+            "error": (
+                "Missing fields: "
+                + ", ".join(missing)
+            )
         }), 400
 
     return jsonify({
@@ -817,7 +1011,10 @@ def path_close():
     )
 
 
-@app.route("/PathRaiseEvent", methods=["POST"])
+@app.route(
+    "/PathRaiseEvent",
+    methods=["POST"]
+)
 def path_raise_event():
     data = request.get_json(silent=True) or {}
 
@@ -828,7 +1025,10 @@ def path_raise_event():
     )
 
 
-@app.route("/PathSetProperties", methods=["POST"])
+@app.route(
+    "/PathSetProperties",
+    methods=["POST"]
+)
 def path_set_properties():
     data = request.get_json(silent=True) or {}
 
