@@ -4,6 +4,8 @@ import random
 import uuid
 import logging
 import secrets
+import base64
+import json
 import requests
 
 from flask import Flask, jsonify, request
@@ -16,7 +18,12 @@ app = Flask(__name__)
 TITLE_ID = os.environ.get("PLAYFAB_TITLE_ID", "")
 PLAYFAB_SECRET_KEY = os.environ.get("PLAYFAB_SECRET_KEY", "")
 META_ACCESS_TOKEN = os.environ.get("META_ACCESS_TOKEN", "")
-ATTESTATION_WEBHOOK_URL = os.environ.get("ATTESTATION_WEBHOOK_URL", "")
+META_PACKAGE_ID = os.environ.get("META_PACKAGE_ID", "")
+META_CERT_SHA256 = os.environ.get("META_CERT_SHA256", "")
+ATTESTATION_WEBHOOK_URL = os.environ.get(
+    "ATTESTATION_WEBHOOK_URL",
+    ""
+)
 
 START_TIME = time.time()
 NONCES = {}
@@ -34,7 +41,7 @@ REDEEMABLE_ITEMS = [
 
 
 def validate_input(data, fields):
-    if not data:
+    if not isinstance(data, dict):
         return fields
 
     return [
@@ -54,7 +61,7 @@ def game_log(title, message):
         "embeds": [
             {
                 "title": title,
-                "description": message,
+                "description": str(message)[:3900],
                 "footer": {
                     "text": "Oculus Tag Backend"
                 },
@@ -77,6 +84,50 @@ def game_log(title, message):
             "Discord logging failed: %s",
             e
         )
+
+
+def mask_secret(value, visible=12):
+    if not value:
+        return ""
+
+    value = str(value)
+
+    if len(value) <= visible * 2:
+        return "*" * len(value)
+
+    return (
+        value[:visible]
+        + "..."
+        + value[-visible:]
+    )
+
+
+def attestation_log(title, fields=None):
+    fields = fields or {}
+
+    lines = [
+        f"**{title}**"
+    ]
+
+    for key, value in fields.items():
+        if isinstance(value, (dict, list)):
+            value = json.dumps(
+                value,
+                indent=2
+            )
+
+        lines.append(
+            f"**{key}:**"
+        )
+
+        lines.append(
+            f"```text\n{value}\n```"
+        )
+
+    game_log(
+        title,
+        "\n".join(lines)
+    )
 
 
 def playfab_headers():
@@ -150,12 +201,13 @@ def cloud_script(function_name, parameters=None, playfab_id=None):
     return jsonify(result), response.status_code
 
 
-def generate_nonce():
+def generate_nonce(userid=None):
     nonce = secrets.token_urlsafe(32)
 
     NONCES[nonce] = {
         "created": time.time(),
-        "used": False
+        "used": False,
+        "userid": str(userid or "Unknown")
     }
 
     return nonce
@@ -166,12 +218,30 @@ def cleanup_nonces():
 
     expired = []
 
-    for nonce, data in NONCES.items():
+    for nonce, data in list(NONCES.items()):
         if now - data["created"] > 600:
             expired.append(nonce)
 
     for nonce in expired:
         NONCES.pop(nonce, None)
+
+
+def decode_base64url_json(value):
+    try:
+        padding = "=" * (
+            (-len(value)) % 4
+        )
+
+        decoded = base64.urlsafe_b64decode(
+            value + padding
+        )
+
+        return json.loads(
+            decoded.decode("utf-8")
+        )
+
+    except Exception:
+        return None
 
 
 @app.before_request
@@ -200,7 +270,12 @@ def api_request_log(response):
         request.remote_addr or "Unknown"
     ).split(",")[0].strip()
 
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    )
+
+    if not isinstance(data, dict):
+        data = {}
 
     playfab_id = (
         data.get("PlayFabId")
@@ -288,10 +363,17 @@ def get_server_config():
 
 @app.route("/api/CachePlayFabId", methods=["POST"])
 def cache_playfab_id():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
-    playfab_id = data.get("PlayFabId")
-    oculus_id = data.get("OculusId")
+    playfab_id = data.get(
+        "PlayFabId"
+    )
+
+    oculus_id = data.get(
+        "OculusId"
+    )
 
     if not playfab_id:
         return jsonify({
@@ -332,11 +414,42 @@ def cache_playfab_id():
 def attestation_challenge():
     cleanup_nonces()
 
-    nonce = generate_nonce()
+    data = request.get_json(
+        silent=True
+    ) or {}
 
-    game_log(
-        "Attestation Challenge",
-        "A new Quest attestation challenge was created."
+    if not isinstance(data, dict):
+        data = {}
+
+    userid = (
+        data.get("userid")
+        or data.get("UserId")
+        or data.get("UserID")
+        or data.get("OculusId")
+        or data.get("oculus_id")
+        or request.args.get("userid")
+        or request.args.get("UserId")
+        or request.args.get("OculusId")
+        or "Unknown"
+    )
+
+    nonce = generate_nonce(
+        userid
+    )
+
+    attestation_log(
+        "1. ATTESTATION BEGIN",
+        {
+            "userid": str(userid)
+        }
+    )
+
+    attestation_log(
+        "2. SUCCESS BEGIN BIRD",
+        {
+            "userid": str(userid),
+            "challenge nonce": nonce
+        }
     )
 
     return jsonify({
@@ -350,40 +463,100 @@ def attestation_challenge():
     methods=["POST"]
 )
 def attestation_verify():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
-    token = data.get("attestation_token")
-    nonce = data.get("challenge_nonce")
+    if not isinstance(data, dict):
+        data = {}
+
+    token = data.get(
+        "attestation_token"
+    )
+
+    challenge_nonce = data.get(
+        "challenge_nonce"
+    )
 
     if not token:
         return jsonify({
             "success": False,
+            "verified": False,
             "error": "Missing attestation_token"
         }), 400
 
-    if not nonce:
+    if not challenge_nonce:
         return jsonify({
             "success": False,
+            "verified": False,
             "error": "Missing challenge_nonce"
         }), 400
 
-    nonce_data = NONCES.get(nonce)
+    nonce_data = NONCES.get(
+        challenge_nonce
+    )
 
     if not nonce_data:
         return jsonify({
             "success": False,
+            "verified": False,
             "error": "Invalid or expired challenge nonce"
         }), 401
 
-    if nonce_data["used"]:
+    if nonce_data.get("used"):
         return jsonify({
             "success": False,
+            "verified": False,
             "error": "Challenge nonce already used"
         }), 401
+
+    if (
+        time.time()
+        - nonce_data["created"]
+        > 600
+    ):
+        NONCES.pop(
+            challenge_nonce,
+            None
+        )
+
+        return jsonify({
+            "success": False,
+            "verified": False,
+            "error": "Challenge nonce expired"
+        }), 401
+
+    userid = nonce_data.get(
+        "userid",
+        data.get(
+            "userid",
+            data.get(
+                "UserId",
+                data.get(
+                    "OculusId",
+                    "Unknown"
+                )
+            )
+        )
+    )
+
+    attestation_log(
+        "3. ATTESTATION COMPLETE",
+        {
+            "userid": str(userid),
+            "meta nonce": {
+                "nonce": challenge_nonce
+            },
+            "attestation token": mask_secret(
+                token
+            )
+        }
+    )
 
     if not META_ACCESS_TOKEN:
         return jsonify({
             "success": False,
+            "verified": False,
             "error": "META_ACCESS_TOKEN is not configured"
         }), 500
 
@@ -400,40 +573,432 @@ def attestation_verify():
         try:
             result = response.json()
         except ValueError:
+            game_log(
+                "Attestation Error",
+                "Meta returned an invalid JSON response."
+            )
+
             return jsonify({
                 "success": False,
+                "verified": False,
                 "error": "Invalid response from Meta"
             }), 502
 
         if response.status_code != 200:
             game_log(
                 "Attestation Rejected",
-                "Meta rejected a Quest attestation token."
+                "Meta rejected the Quest attestation token."
             )
 
             return jsonify({
                 "success": False,
+                "verified": False,
                 "error": "Meta rejected the attestation token"
             }), 401
+
+        meta_data = result.get(
+            "data"
+        )
+
+        if not isinstance(
+            meta_data,
+            list
+        ):
+            return jsonify({
+                "success": False,
+                "verified": False,
+                "error": "Invalid Meta verification response"
+            }), 401
+
+        if not meta_data:
+            return jsonify({
+                "success": False,
+                "verified": False,
+                "error": "Meta returned no verification data"
+            }), 401
+
+        verification = meta_data[0]
+
+        verification_message = verification.get(
+            "message"
+        )
+
+        if verification_message != "success":
+            game_log(
+                "Attestation Rejected",
+                "Meta verification failed."
+            )
+
+            return jsonify({
+                "success": False,
+                "verified": False,
+                "error": (
+                    verification_message
+                    or "Meta rejected the attestation token"
+                )
+            }), 401
+
+        claims_encoded = verification.get(
+            "claims"
+        )
+
+        if not claims_encoded:
+            return jsonify({
+                "success": False,
+                "verified": False,
+                "error": "Meta returned no claims"
+            }), 401
+
+        claims = decode_base64url_json(
+            claims_encoded
+        )
+
+        if not claims:
+            game_log(
+                "Attestation Rejected",
+                "Unable to decode Meta attestation claims."
+            )
+
+            return jsonify({
+                "success": False,
+                "verified": False,
+                "error": "Could not decode attestation claims"
+            }), 401
+
+        request_details = claims.get(
+            "request_details"
+        )
+
+        app_state = claims.get(
+            "app_state"
+        )
+
+        device_state = claims.get(
+            "device_state"
+        )
+
+        if not isinstance(
+            request_details,
+            dict
+        ):
+            return jsonify({
+                "success": False,
+                "verified": False,
+                "error": "Missing request details"
+            }), 401
+
+        if not isinstance(
+            app_state,
+            dict
+        ):
+            return jsonify({
+                "success": False,
+                "verified": False,
+                "error": "Missing app state"
+            }), 401
+
+        if not isinstance(
+            device_state,
+            dict
+        ):
+            return jsonify({
+                "success": False,
+                "verified": False,
+                "error": "Missing device state"
+            }), 401
+
+        token_nonce = request_details.get(
+            "nonce"
+        )
+
+        expiration = request_details.get(
+            "exp"
+        )
+
+        timestamp = request_details.get(
+            "timestamp"
+        )
+
+        if token_nonce != challenge_nonce:
+            game_log(
+                "Attestation Rejected",
+                "The attestation nonce did not match the server challenge."
+            )
+
+            return jsonify({
+                "success": False,
+                "verified": False,
+                "error": "Attestation nonce mismatch"
+            }), 401
+
+        now = int(
+            time.time()
+        )
+
+        try:
+            expiration = int(
+                expiration
+            )
+        except (
+            TypeError,
+            ValueError
+        ):
+            return jsonify({
+                "success": False,
+                "verified": False,
+                "error": "Invalid attestation expiration"
+            }), 401
+
+        try:
+            timestamp = int(
+                timestamp
+            )
+        except (
+            TypeError,
+            ValueError
+        ):
+            return jsonify({
+                "success": False,
+                "verified": False,
+                "error": "Invalid attestation timestamp"
+            }), 401
+
+        if expiration <= now:
+            game_log(
+                "Attestation Rejected",
+                "The attestation token has expired."
+            )
+
+            return jsonify({
+                "success": False,
+                "verified": False,
+                "error": "Attestation token expired"
+            }), 401
+
+        timestamp_age = abs(
+            now - timestamp
+        )
+
+        if timestamp_age > 300:
+            game_log(
+                "Attestation Rejected",
+                "The attestation timestamp is too old."
+            )
+
+            return jsonify({
+                "success": False,
+                "verified": False,
+                "error": "Attestation timestamp is too old"
+            }), 401
+
+        package_id = app_state.get(
+            "package_id"
+        )
+
+        app_integrity_state = app_state.get(
+            "app_integrity_state"
+        )
+
+        certificate_digests = app_state.get(
+            "package_cert_sha256_digest",
+            []
+        )
+
+        device_integrity_state = device_state.get(
+            "device_integrity_state"
+        )
+
+        custom_id = (
+            data.get("custom_id")
+            or data.get("CustomId")
+            or data.get("customId")
+            or "Unknown"
+        )
+
+        meta_user = (
+            data.get("meta_user")
+            or data.get("MetaUser")
+            or data.get("metaUser")
+            or "Unknown"
+        )
+
+        attestation_log(
+            "4. BIG DICK RANDY INFORMATION",
+            {
+                "meta id": str(userid),
+                "custom id": str(custom_id),
+                "meta user": str(meta_user),
+                "nonce": challenge_nonce
+            }
+        )
+
+        if META_PACKAGE_ID:
+            if package_id != META_PACKAGE_ID:
+                game_log(
+                    "Attestation Rejected",
+                    "The attestation package ID did not match."
+                )
+
+                return jsonify({
+                    "success": False,
+                    "verified": False,
+                    "error": "Invalid package ID"
+                }), 401
+
+        if META_CERT_SHA256:
+            expected_cert = (
+                META_CERT_SHA256
+                .strip()
+                .lower()
+            )
+
+            if isinstance(
+                certificate_digests,
+                str
+            ):
+                certificate_digests = [
+                    certificate_digests
+                ]
+
+            normalized_certificates = [
+                str(cert)
+                .strip()
+                .lower()
+                for cert in certificate_digests
+            ]
+
+            if (
+                expected_cert
+                not in normalized_certificates
+            ):
+                game_log(
+                    "Attestation Rejected",
+                    "The attestation certificate did not match."
+                )
+
+                return jsonify({
+                    "success": False,
+                    "verified": False,
+                    "error": "Invalid package certificate"
+                }), 401
+
+        if app_integrity_state != "StoreRecognized":
+            game_log(
+                "Attestation Rejected",
+                "The application is not StoreRecognized."
+            )
+
+            return jsonify({
+                "success": False,
+                "verified": False,
+                "error": "App integrity check failed"
+            }), 401
+
+        if device_integrity_state not in (
+            "Advanced",
+            "Basic"
+        ):
+            game_log(
+                "Attestation Rejected",
+                "The device failed the integrity check."
+            )
+
+            return jsonify({
+                "success": False,
+                "verified": False,
+                "error": "Device integrity check failed"
+            }), 401
+
+        device_ban = claims.get(
+            "device_ban"
+        )
+
+        if isinstance(
+            device_ban,
+            dict
+        ):
+            if device_ban.get(
+                "is_banned"
+            ) is True:
+                game_log(
+                    "Attestation Rejected",
+                    "The attested device is banned."
+                )
+
+                return jsonify({
+                    "success": False,
+                    "verified": False,
+                    "error": "Device is banned"
+                }), 403
+
+        attestation_log(
+            "5. DEVICE INFO COMPLETED BIRD",
+            {
+                "message": (
+                    "the lil app integrity "
+                    "has passed on bird.."
+                ),
+                "claims": claims,
+                "Mothership Id": str(
+                    data.get(
+                        "mothership_id",
+                        data.get(
+                            "MothershipId",
+                            "Unknown"
+                        )
+                    )
+                ),
+                "accounts": data.get(
+                    "accounts",
+                    1
+                ),
+                "attestation token": mask_secret(
+                    token
+                )
+            }
+        )
 
         nonce_data["used"] = True
 
         game_log(
             "Attestation Verified",
-            "Quest attestation successfully verified."
+            f"**User ID:** `{userid}`\n"
+            f"**Package:** `{package_id}`\n"
+            f"**App Integrity:** `{app_integrity_state}`\n"
+            f"**Device Integrity:** `{device_integrity_state}`"
         )
 
         return jsonify({
             "success": True,
             "verified": True,
-            "meta": result
+            "package_id": package_id,
+            "app_integrity_state": app_integrity_state,
+            "device_integrity_state": device_integrity_state
         })
 
-    except requests.RequestException:
+    except requests.RequestException as e:
+        logger.error(
+            "Meta attestation request failed: %s",
+            e
+        )
+
         return jsonify({
             "success": False,
+            "verified": False,
             "error": "Could not contact Meta"
         }), 502
+
+    except Exception as e:
+        logger.exception(
+            "Attestation verification failed: %s",
+            e
+        )
+
+        return jsonify({
+            "success": False,
+            "verified": False,
+            "error": "Internal attestation verification error"
+        }), 500
 
 
 @app.route(
@@ -441,7 +1006,9 @@ def attestation_verify():
     methods=["POST"]
 )
 def playfab_authentication():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
     required = [
         "Nonce",
@@ -470,7 +1037,9 @@ def playfab_authentication():
             "Error": "BadRequest-AppIdMismatch"
         }), 400
 
-    oculus_id = str(data["OculusId"])
+    oculus_id = str(
+        data["OculusId"]
+    )
 
     login_payload = {
         "ServerCustomId": "OCULUS" + oculus_id,
@@ -529,19 +1098,49 @@ def playfab_authentication():
         {}
     )
 
-    session_id = str(uuid.uuid4())
+    session_id = str(
+        uuid.uuid4()
+    )
 
     CACHED_PLAYFAB_IDS[oculus_id] = {
         "PlayFabId": playfab_id,
-        "Username": data.get("Username"),
+        "Username": data.get(
+            "Username"
+        ),
         "cached": time.time()
     }
 
-    game_log(
-        "Player Login",
-        f"PlayFab ID: `{playfab_id}`\n"
-        f"Oculus ID: `{oculus_id}`\n"
-        f"Username: `{data.get('Username', 'Unknown')}`"
+    orgscoped_id = (
+        data.get("orgscoped_id")
+        or data.get("OrgScopedId")
+        or data.get("OrgscopedId")
+        or data.get("CustomId")
+        or oculus_id
+    )
+
+    attestation_log(
+        "6. SUCCESS AUTH",
+        {
+            "orgscoped id": str(
+                orgscoped_id
+            ),
+            "oculus id": str(
+                oculus_id
+            ),
+            "playfab id": str(
+                playfab_id or "Unknown"
+            ),
+            "entity token": mask_secret(
+                entity_token
+            ),
+            "session ticket": mask_secret(
+                session_ticket
+            ),
+            "platform": data.get(
+                "Platform",
+                "Quest"
+            )
+        }
     )
 
     return jsonify({
@@ -618,9 +1217,14 @@ def get_accepted_agreements():
     methods=["POST"]
 )
 def submit_accepted_agreements():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
-    playfab_id = data.get("PlayFabId")
+    playfab_id = data.get(
+        "PlayFabId"
+    )
+
     agreements = data.get(
         "Agreements",
         {}
@@ -685,7 +1289,9 @@ def get_name():
     methods=["POST"]
 )
 def get_inventory():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
     playfab_id = data.get(
         "PlayFabId"
@@ -708,7 +1314,9 @@ def get_inventory():
     methods=["POST"]
 )
 def get_leaderboard():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
     statistic = data.get(
         "StatisticName",
@@ -729,7 +1337,9 @@ def get_leaderboard():
     methods=["POST"]
 )
 def update_stats():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
     missing = validate_input(
         data,
@@ -759,7 +1369,9 @@ def update_stats():
     methods=["POST"]
 )
 def update_profile():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
     missing = validate_input(
         data,
@@ -801,7 +1413,9 @@ def get_cosmetics():
     methods=["POST"]
 )
 def equip_cosmetic():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
     missing = validate_input(
         data,
@@ -843,7 +1457,9 @@ def equip_cosmetic():
     methods=["POST"]
 )
 def report_player():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
     missing = validate_input(
         data,
@@ -880,7 +1496,9 @@ def report_player():
     methods=["POST"]
 )
 def create_party():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
     playfab_id = data.get(
         "PlayFabId"
@@ -891,7 +1509,9 @@ def create_party():
             "error": "Missing PlayFabId"
         }), 400
 
-    party_id = str(uuid.uuid4())
+    party_id = str(
+        uuid.uuid4()
+    )
 
     game_log(
         "Party Created",
@@ -910,7 +1530,9 @@ def create_party():
     methods=["POST"]
 )
 def join_party():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
     missing = validate_input(
         data,
@@ -939,7 +1561,9 @@ def join_party():
     methods=["POST"]
 )
 def leave_party():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
     missing = validate_input(
         data,
@@ -963,9 +1587,14 @@ def leave_party():
     })
 
 
-@app.route("/PathCreate", methods=["POST"])
+@app.route(
+    "/PathCreate",
+    methods=["POST"]
+)
 def path_create():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
     return cloud_script(
         "RoomCreated",
@@ -974,9 +1603,14 @@ def path_create():
     )
 
 
-@app.route("/PathJoin", methods=["POST"])
+@app.route(
+    "/PathJoin",
+    methods=["POST"]
+)
 def path_join():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
     return cloud_script(
         "RoomJoined",
@@ -985,9 +1619,14 @@ def path_join():
     )
 
 
-@app.route("/PathLeave", methods=["POST"])
+@app.route(
+    "/PathLeave",
+    methods=["POST"]
+)
 def path_leave():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
     data["Type"] = "ClientDisconnect"
 
@@ -998,9 +1637,14 @@ def path_leave():
     )
 
 
-@app.route("/PathClose", methods=["POST"])
+@app.route(
+    "/PathClose",
+    methods=["POST"]
+)
 def path_close():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
     data["Type"] = "Close"
 
@@ -1016,7 +1660,9 @@ def path_close():
     methods=["POST"]
 )
 def path_raise_event():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
     return cloud_script(
         "RoomEventRaised",
@@ -1030,7 +1676,9 @@ def path_raise_event():
     methods=["POST"]
 )
 def path_set_properties():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(
+        silent=True
+    ) or {}
 
     return cloud_script(
         "RoomPropertyUpdated",
