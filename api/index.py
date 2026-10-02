@@ -579,19 +579,27 @@ def attestation_challenge():
             "error": "OculusId is required."
         }), 400
 
-    challenge = generate_challenge(oculus_id)
+    try:
+        challenge = generate_challenge(oculus_id)
 
-    send_discord_log(
-        f"New Attestation Nonce\n"
-        f"Oculus ID: `{oculus_id}`\n"
-        f"Challenge created successfully."
-    )
+        send_discord_log(
+            f"New Attestation Nonce\n"
+            f"Oculus ID: `{oculus_id}`\n"
+            f"Challenge created successfully."
+        )
 
-    return jsonify({
-        "success": True,
-        "challenge_nonce": challenge
-    })
+        return jsonify({
+            "success": True,
+            "challenge_nonce": challenge
+        })
 
+    except Exception:
+        logging.exception("Attestation challenge failed")
+
+        return jsonify({
+            "success": False,
+            "error": "Internal Server Error"
+        }), 500
 
 @app.route("/api/attestation/verify", methods=["POST"])
 def attestation_verify():
